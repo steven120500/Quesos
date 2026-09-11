@@ -18,7 +18,7 @@ function GestionUsuarios({ onVolver }) {
 
   const obtenerUsuarios = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/usuarios');
+      const res = await fetch('(https://backend-quesos.onrender.com/api/usuarios');
       const data = await res.json();
       setUsuarios(data);
     } catch (error) {
@@ -40,7 +40,7 @@ function GestionUsuarios({ onVolver }) {
     e.preventDefault();
     setCargando(true);
     try {
-      const res = await fetch('http://localhost:4000/api/usuarios', {
+      const res = await fetch('(https://backend-quesos.onrender.com/api/usuarios', {
          method: 'POST',
          headers: {'Content-Type': 'application/json'},
          body: JSON.stringify({ usuario: nuevoUser, password: nuevoPass, permisos, rol: 'cajero' })
@@ -67,7 +67,7 @@ function GestionUsuarios({ onVolver }) {
     if (!usuarioAEliminar) return;
 
     try {
-      const res = await fetch(`http://localhost:4000/api/usuarios/${usuarioAEliminar._id}`, { 
+      const res = await fetch(`(https://backend-quesos.onrender.com/api/usuarios/${usuarioAEliminar._id}`, { 
         method: 'DELETE' 
       });
       

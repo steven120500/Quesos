@@ -22,7 +22,7 @@ function ReporteFinanzas({ sucursal }) {
     const obtenerVentas = async () => {
       setCargando(true);
       try {
-        const respuesta = await fetch(`http://localhost:4000/api/ventas/${sucursal}`);
+        const respuesta = await fetch(`(https://backend-quesos.onrender.com/api/ventas/${sucursal}`);
         if (respuesta.ok) {
           const datos = await respuesta.json();
           setVentasBD(datos);
@@ -45,7 +45,7 @@ function ReporteFinanzas({ sucursal }) {
   const ejecutarEliminacionBD = async () => {
     if (!ventaAEliminar) return;
     try {
-      const respuesta = await fetch(`http://localhost:4000/api/ventas/${ventaAEliminar._id}`, {
+      const respuesta = await fetch(`(https://backend-quesos.onrender.com/api/ventas/${ventaAEliminar._id}`, {
         method: 'DELETE',
       });
       if (respuesta.ok) {

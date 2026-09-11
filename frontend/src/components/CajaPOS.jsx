@@ -20,7 +20,7 @@ function CajaPOS({ sucursal }) {
     const obtenerProductos = async () => {
       setCargando(true);
       try {
-        const respuesta = await fetch(`http://localhost:4000/api/productos/${sucursal}`);
+        const respuesta = await fetch(`https://backend-quesos.onrender.com/api/productos/${sucursal}`);
         if (respuesta.ok) {
           const datos = await respuesta.json();
           setProductos(datos);
@@ -63,7 +63,7 @@ function CajaPOS({ sucursal }) {
     if (!productoAEliminar) return;
     
     try {
-      const respuesta = await fetch(`http://localhost:4000/api/productos/${productoAEliminar._id}`, {
+      const respuesta = await fetch(`https://backend-quesos.onrender.com/api/productos/${productoAEliminar._id}`, {
         method: 'DELETE',
       });
 
@@ -126,7 +126,7 @@ function CajaPOS({ sucursal }) {
         metodoPago: metodoPago
       };
 
-      const respuesta = await fetch('http://localhost:4000/api/ventas', {
+      const respuesta = await fetch('https://backend-quesos.onrender.com/api/ventas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datosVenta)

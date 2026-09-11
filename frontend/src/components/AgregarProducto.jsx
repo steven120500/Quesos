@@ -20,7 +20,7 @@ function AgregarProducto({ sucursal }) {
     const obtenerUltimoCodigo = async () => {
       setCargandoCodigo(true);
       try {
-        const respuesta = await fetch(`http://localhost:4000/api/productos/${sucursal}`);
+        const respuesta = await fetch(`https://backend-quesos.onrender.com/api/productos/${sucursal}`);
         if (respuesta.ok) {
           const productos = await respuesta.json();
           
@@ -59,7 +59,7 @@ function AgregarProducto({ sucursal }) {
     };
 
     try {
-      const respuesta = await fetch('http://localhost:4000/api/productos', {
+      const respuesta = await fetch('https://backend-quesos.onrender.com/api/productos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datosProducto)
