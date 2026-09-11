@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 function AgregarProducto({ sucursal }) {
   const [nombre, setNombre] = useState('');
@@ -9,31 +10,26 @@ function AgregarProducto({ sucursal }) {
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' }); 
   const [cargando, setCargando] = useState(false); 
   
-  // NUEVO: Estado para saber si estamos calculando el código
   const [cargandoCodigo, setCargandoCodigo] = useState(true);
   const [contadorCodigo, setContadorCodigo] = useState(1);
   
   const codigoAutomatico = String(contadorCodigo).padStart(3, '0');
 
-  // NUEVO: UseEffect para buscar el último código en la base de datos
   useEffect(() => {
     const obtenerUltimoCodigo = async () => {
       setCargandoCodigo(true);
       try {
-        const respuesta = await fetch(`https://backend-quesos.onrender.com/api/productos/${sucursal}`);
-        if (respuesta.ok) {
-          const productos = await respuesta.json();
-          
-          if (productos.length > 0) {
-            // Extraemos todos los códigos, los convertimos a números y buscamos el más alto
-            const codigos = productos.map(p => parseInt(p.codigo, 10)).filter(c => !isNaN(c));
-            const maxCodigo = codigos.length > 0 ? Math.max(...codigos) : 0;
-            
-            // Le sumamos 1 al código más alto que encontró
-            setContadorCodigo(maxCodigo + 1);
-          } else {
-            setContadorCodigo(1); // Si no hay productos, empezamos en 1
-          }
+        const { data: productos, error } = await supabase
+          .from('productos')
+          .select('codigo')
+          .eq('sucursal', sucursal);
+
+        if (productos && productos.length > 0) {
+          const codigos = productos.map(p => parseInt(p.codigo, 10)).filter(c => !isNaN(c));
+          const maxCodigo = codigos.length > 0 ? Math.max(...codigos) : 0;
+          setContadorCodigo(maxCodigo + 1);
+        } else {
+          setContadorCodigo(1);
         }
       } catch (error) {
         console.error('Error al obtener el último código:', error);
@@ -43,7 +39,7 @@ function AgregarProducto({ sucursal }) {
     };
 
     obtenerUltimoCodigo();
-  }, [sucursal]); // Se vuelve a calcular si cambias de local
+  }, [sucursal]);
 
   const handleSubmit = async (e) => {
     e.preventDefault(); 
@@ -59,26 +55,23 @@ function AgregarProducto({ sucursal }) {
     };
 
     try {
-      const respuesta = await fetch('https://backend-quesos.onrender.com/api/productos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(datosProducto)
-      });
+      const { error } = await supabase
+        .from('productos')
+        .insert([datosProducto]);
 
-      if (respuesta.ok) {
+      if (!error) {
         setMensaje({ texto: `¡Producto #${codigoAutomatico} - "${nombre}" guardado!`, tipo: 'exito' });
         setNombre('');
         setPrecioCosto('');
         setPrecioVenta('');
         setTipoVenta('Peso');
-        // Al guardar con éxito, preparamos el siguiente código automáticamente
         setContadorCodigo(contadorCodigo + 1);
       } else {
-        setMensaje({ texto: 'Error al guardar el producto en el servidor.', tipo: 'error' });
+        setMensaje({ texto: 'Error al guardar el producto en la base de datos.', tipo: 'error' });
       }
     } catch (error) {
       console.error('Error de conexión:', error);
-      setMensaje({ texto: 'Error de conexión. ¿Está encendido el servidor backend?', tipo: 'error' });
+      setMensaje({ texto: 'Error de conexión con la base de datos.', tipo: 'error' });
     } finally {
       setCargando(false); 
       setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
@@ -88,7 +81,6 @@ function AgregarProducto({ sucursal }) {
   return (
     <div className="bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-8 max-w-2xl mx-auto mt-4">
       <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-100">
-       
         <div>
           <h2 className="text-[#8B5A2B] text-2xl font-bold">Crear Nuevo Producto</h2>
           <p className="text-gray-500 font-medium">Inventario: <span className="text-[#FFB800] font-bold">{sucursal}</span></p>
@@ -103,17 +95,16 @@ function AgregarProducto({ sucursal }) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        
         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
           <label className="block text-[#4A2511] font-bold mb-3 text-lg">¿Cómo se vende este producto?</label>
           <div className="flex gap-4">
             <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${tipoVenta === 'Peso' ? 'border-[#8B5A2B] bg-[#FFF0C2] text-[#8B5A2B]' : 'border-gray-200 bg-white text-gray-500'}`}>
               <input type="radio" name="tipoVenta" value="Peso" checked={tipoVenta === 'Peso'} onChange={(e) => setTipoVenta(e.target.value)} className="hidden" />
-              <span className="text-xl"></span> <span className="font-bold">Por Peso (Gramos)</span>
+              <span className="font-bold">Por Peso (Gramos)</span>
             </label>
             <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${tipoVenta === 'Unidad' ? 'border-[#8B5A2B] bg-[#FFF0C2] text-[#8B5A2B]' : 'border-gray-200 bg-white text-gray-500'}`}>
               <input type="radio" name="tipoVenta" value="Unidad" checked={tipoVenta === 'Unidad'} onChange={(e) => setTipoVenta(e.target.value)} className="hidden" />
-              <span className="text-xl"></span> <span className="font-bold">Por Unidad Entera</span>
+              <span className="font-bold">Por Unidad Entera</span>
             </label>
           </div>
         </div>
@@ -121,7 +112,6 @@ function AgregarProducto({ sucursal }) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="md:col-span-1">
             <label className="block text-[#4A2511] font-bold mb-2 text-lg">Código</label>
-            {/* NUEVO: Muestra "..." mientras carga el código de la base de datos */}
             <input 
               type="text" 
               disabled 
@@ -149,7 +139,6 @@ function AgregarProducto({ sucursal }) {
         </div>
 
         <div className="pt-6 mt-6 border-t border-gray-100">
-          {/* El botón se deshabilita si todavía está cargando el código */}
           <button type="submit" disabled={cargando || cargandoCodigo} className={`font-bold py-4 px-4 rounded-xl shadow-lg transition-colors text-xl w-full active:scale-95 flex justify-center items-center gap-3 ${(cargando || cargandoCodigo) ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-[#8B5A2B] hover:bg-[#4A2511] text-white cursor-pointer'}`}>
             {cargando ? <span className="animate-pulse">Guardando en Base de Datos...</span> : <>Guardar Producto</>}
           </button>
@@ -159,4 +148,4 @@ function AgregarProducto({ sucursal }) {
   );
 }
 
-export default AgregarProducto; 
+export default AgregarProducto;

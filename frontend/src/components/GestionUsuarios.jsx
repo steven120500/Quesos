@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 function GestionUsuarios({ onVolver }) {
   const [usuarios, setUsuarios] = useState([]);
@@ -7,7 +8,6 @@ function GestionUsuarios({ onVolver }) {
   const [permisos, setPermisos] = useState(['pos']); 
   const [cargando, setCargando] = useState(false);
 
-  // --- NUEVOS ESTADOS PARA DISEÑO PROFESIONAL ---
   const [notificacion, setNotificacion] = useState({ visible: false, mensaje: '', tipo: '' });
   const [usuarioAEliminar, setUsuarioAEliminar] = useState(null);
 
@@ -18,11 +18,13 @@ function GestionUsuarios({ onVolver }) {
 
   const obtenerUsuarios = async () => {
     try {
-      const res = await fetch('https://backend-quesos.onrender.com/api/usuarios');
-      const data = await res.json();
-      setUsuarios(data);
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('_id, usuario, rol, permisos, "createdAt"');
+      
+      if (data) setUsuarios(data);
     } catch (error) {
-      console.error(error);
+      console.error('Error al obtener usuarios:', error);
     }
   };
 
@@ -40,13 +42,11 @@ function GestionUsuarios({ onVolver }) {
     e.preventDefault();
     setCargando(true);
     try {
-      const res = await fetch('https://backend-quesos.onrender.com/api/usuarios', {
-         method: 'POST',
-         headers: {'Content-Type': 'application/json'},
-         body: JSON.stringify({ usuario: nuevoUser, password: nuevoPass, permisos, rol: 'cajero' })
-      });
+      const { error } = await supabase
+        .from('usuarios')
+        .insert([{ usuario: nuevoUser, password: nuevoPass, permisos, rol: 'cajero' }]);
       
-      if (res.ok) {
+      if (!error) {
         setNuevoUser('');
         setNuevoPass('');
         setPermisos(['pos']);
@@ -62,16 +62,16 @@ function GestionUsuarios({ onVolver }) {
     }
   };
 
-  // --- NUEVA FUNCIÓN: Ejecuta el borrado real tras confirmar en el modal ---
   const confirmarEliminacionBD = async () => {
     if (!usuarioAEliminar) return;
 
     try {
-      const res = await fetch(`https://backend-quesos.onrender.com/api/usuarios/${usuarioAEliminar._id}`, { 
-        method: 'DELETE' 
-      });
+      const { error } = await supabase
+        .from('usuarios')
+        .delete()
+        .eq('_id', usuarioAEliminar._id);
       
-      if (res.ok) {
+      if (!error) {
         obtenerUsuarios();
         mostrarNotificacion('Usuario eliminado permanentemente', 'exito');
       } else {
@@ -80,14 +80,12 @@ function GestionUsuarios({ onVolver }) {
     } catch (error) {
       mostrarNotificacion('Error de conexión', 'error');
     } finally {
-      setUsuarioAEliminar(null); // Cierra el modal pase lo que pase
+      setUsuarioAEliminar(null);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-8 flex flex-col items-center relative">
-      
-      {/* --- NOTIFICACIÓN FLOTANTE --- */}
       {notificacion.visible && (
         <div className={`fixed bottom-5 right-5 sm:bottom-10 sm:right-10 px-6 py-4 rounded-xl shadow-2xl z-50 flex items-center gap-3 transition-all text-white font-bold text-lg
           ${notificacion.tipo === 'exito' ? 'bg-[#2E7D32]' : 'bg-red-600'}`}>
@@ -95,7 +93,6 @@ function GestionUsuarios({ onVolver }) {
         </div>
       )}
 
-      {/* --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN --- */}
       {usuarioAEliminar && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-red-100">
@@ -127,8 +124,6 @@ function GestionUsuarios({ onVolver }) {
       )}
 
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-[#FFF0C2]">
-        
-        {/* ENCABEZADO RESPONSIVO */}
         <div className="bg-[#4A2511] p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-center text-[#FFB800] gap-4">
           <h2 className="text-2xl sm:text-3xl font-bold text-center sm:text-left">Gestión de Usuarios</h2>
           <button onClick={onVolver} className="w-full sm:w-auto bg-white/20 hover:bg-white/30 px-6 py-3 sm:py-2 rounded-lg font-bold transition-colors text-white cursor-pointer text-center">
@@ -136,10 +131,7 @@ function GestionUsuarios({ onVolver }) {
           </button>
         </div>
         
-        {/* CONTENEDOR PRINCIPAL: Pasa a 1 columna en móvil y mantiene el orden lógico */}
         <div className="p-4 sm:p-8 flex flex-col lg:flex-row gap-8">
-          
-          {/* Formulario de Creación */}
           <div className="w-full lg:w-1/3 bg-gray-50 p-6 rounded-2xl border border-gray-200 flex-shrink-0">
             <h3 className="text-xl font-bold text-[#8B5A2B] mb-4">Crear Nuevo Cajero</h3>
             <form onSubmit={crearUsuario} className="space-y-4">
@@ -174,10 +166,8 @@ function GestionUsuarios({ onVolver }) {
             </form>
           </div>
           
-          {/* Lista de Usuarios con scroll horizontal en móvil */}
           <div className="w-full lg:w-2/3">
             <h3 className="text-xl font-bold text-[#8B5A2B] mb-4">Usuarios Activos</h3>
-            
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto w-full">
               <table className="min-w-full divide-y divide-gray-200 text-left whitespace-nowrap">
                 <thead className="bg-[#FFF0C2] text-[#8B5A2B]">

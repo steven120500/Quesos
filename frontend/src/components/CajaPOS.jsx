@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 function CajaPOS({ sucursal }) {
   const [productos, setProductos] = useState([]);
@@ -12,19 +13,18 @@ function CajaPOS({ sucursal }) {
   const [productoParaPesar, setProductoParaPesar] = useState(null);
   const [pesoGramos, setPesoGramos] = useState('');
   const [notificacion, setNotificacion] = useState({ visible: false, mensaje: '', tipo: '' });
-
-  // NUEVO ESTADO: Para controlar la ventana de eliminar
   const [productoAEliminar, setProductoAEliminar] = useState(null);
 
   useEffect(() => {
     const obtenerProductos = async () => {
       setCargando(true);
       try {
-        const respuesta = await fetch(`https://backend-quesos.onrender.com/api/productos/${sucursal}`);
-        if (respuesta.ok) {
-          const datos = await respuesta.json();
-          setProductos(datos);
-        }
+        const { data, error } = await supabase
+          .from('productos')
+          .select('*')
+          .eq('sucursal', sucursal);
+
+        if (data) setProductos(data);
       } catch (error) {
         console.error("Error al obtener los productos:", error);
       } finally {
@@ -52,22 +52,20 @@ function CajaPOS({ sucursal }) {
     }
   };
 
-  // --- NUEVA FUNCIÓN: Solo abre la ventana bonita de confirmación ---
   const confirmarEliminacion = (e, producto) => {
     e.stopPropagation(); 
     setProductoAEliminar(producto);
   };
 
-  // --- NUEVA FUNCIÓN: Ejecuta el borrado real en la BD ---
   const ejecutarEliminacionBD = async () => {
     if (!productoAEliminar) return;
-    
     try {
-      const respuesta = await fetch(`https://backend-quesos.onrender.com/api/productos/${productoAEliminar._id}`, {
-        method: 'DELETE',
-      });
+      const { error } = await supabase
+        .from('productos')
+        .delete()
+        .eq('_id', productoAEliminar._id);
 
-      if (respuesta.ok) {
+      if (!error) {
         setProductos(productos.filter((p) => p._id !== productoAEliminar._id));
         mostrarNotificacion('Producto eliminado permanentemente', 'exito');
       } else {
@@ -76,7 +74,7 @@ function CajaPOS({ sucursal }) {
     } catch (error) {
       mostrarNotificacion('Error de conexión', 'error');
     } finally {
-      setProductoAEliminar(null); // Cerramos la ventana pase lo que pase
+      setProductoAEliminar(null);
     }
   };
 
@@ -126,13 +124,11 @@ function CajaPOS({ sucursal }) {
         metodoPago: metodoPago
       };
 
-      const respuesta = await fetch('https://backend-quesos.onrender.com/api/ventas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(datosVenta)
-      });
+      const { error } = await supabase
+        .from('ventas')
+        .insert([datosVenta]);
 
-      if (respuesta.ok) {
+      if (!error) {
         mostrarNotificacion('¡Venta registrada con éxito!', 'exito');
         setCarrito([]); 
         setMetodoPago('Efectivo'); 
@@ -148,8 +144,6 @@ function CajaPOS({ sucursal }) {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full relative">
-      
-      {/* NOTIFICACIÓN FLOTANTE */}
       {notificacion.visible && (
         <div className={`fixed bottom-5 right-5 sm:bottom-10 sm:right-10 px-6 py-4 rounded-xl shadow-2xl z-50 flex items-center gap-3 transition-all text-white font-bold text-lg
           ${notificacion.tipo === 'exito' ? 'bg-[#2E7D32]' : 'bg-red-600'}`}>
@@ -157,7 +151,6 @@ function CajaPOS({ sucursal }) {
         </div>
       )}
 
-      {/* --- NUEVO: MODAL PARA CONFIRMAR ELIMINACIÓN --- */}
       {productoAEliminar && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-red-100">
@@ -171,18 +164,10 @@ function CajaPOS({ sucursal }) {
             </p>
             
             <div className="flex gap-3">
-              <button 
-                type="button" 
-                onClick={() => setProductoAEliminar(null)} 
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer"
-              >
+              <button type="button" onClick={() => setProductoAEliminar(null)} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer">
                 Cancelar
               </button>
-              <button 
-                type="button"
-                onClick={ejecutarEliminacionBD}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer shadow-md"
-              >
+              <button type="button" onClick={ejecutarEliminacionBD} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer shadow-md">
                 Sí, Eliminar
               </button>
             </div>
@@ -190,7 +175,6 @@ function CajaPOS({ sucursal }) {
         </div>
       )}
 
-      {/* --- MODAL DE PESO --- */}
       {productoParaPesar && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -238,9 +222,6 @@ function CajaPOS({ sucursal }) {
               <div key={producto._id} className="w-full bg-gray-50 border-2 border-gray-200 hover:border-[#FFB800] rounded-xl p-3 flex items-center justify-between transition-all shadow-sm hover:shadow-md group">
                 <div onClick={() => manejarClickProducto(producto)} className="flex items-center gap-3 sm:gap-4 flex-1 cursor-pointer">
                   <span className="bg-gray-200 text-gray-600 text-xs sm:text-sm font-bold px-2 py-1 rounded-md min-w-[45px] text-center">#{producto.codigo}</span>
-                  <div >
-                    <span className="text-lg">{producto.tipoVenta === 'Unidad' ? '' : ''}</span>
-                  </div>
                   <span className="font-bold text-gray-700 text-left text-sm sm:text-lg">{producto.nombre}</span>
                 </div>
                 
@@ -251,7 +232,6 @@ function CajaPOS({ sucursal }) {
                     </span>
                   </span>
                   
-                  {/* BOTÓN BASURERO QUE ABRE LA NUEVA VENTANA */}
                   <button 
                     onClick={(e) => confirmarEliminacion(e, producto)}
                     className="w-9 h-9 flex items-center justify-center rounded-full bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors cursor-pointer"

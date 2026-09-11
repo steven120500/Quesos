@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '../supabaseClient';
 
 function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
@@ -10,20 +11,21 @@ function Login({ onLoginSuccess }) {
     e.preventDefault();
     setProcesandoLogin(true);
     try {
-      const res = await fetch('https://backend-quesos.onrender.com/api/usuarios/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario: username, password })
-      });
-      const data = await res.json();
-      if (data.exito) {
-        onLoginSuccess(data.usuario); // Le avisa a App.jsx que el login fue exitoso
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('usuario', username)
+        .eq('password', password)
+        .maybeSingle();
+
+      if (data) {
+        onLoginSuccess(data); // Le avisa a App.jsx que el login fue exitoso
       } else {
         setErrorLogin(true);
         setPassword('');
       }
     } catch (error) {
-      console.error(error);
+      console.error('Error al verificar credenciales:', error);
       setErrorLogin(true);
     } finally {
       setProcesandoLogin(false);

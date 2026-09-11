@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 function ReporteFinanzas({ sucursal }) {
-  // --- ESTADOS PARA FILTROS DE FECHA ---
   const hoy = new Date();
   const formatoMesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
   const formatoDiaActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
 
-  const [tipoFiltro, setTipoFiltro] = useState('dia'); // 'dia' o 'mes'
+  const [tipoFiltro, setTipoFiltro] = useState('dia');
   const [fechaFiltro, setFechaFiltro] = useState(formatoDiaActual);
   const [mesFiltro, setMesFiltro] = useState(formatoMesActual);
 
-  // --- ESTADOS DE DATOS Y UI ---
   const [ventasBD, setVentasBD] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [notificacion, setNotificacion] = useState({ visible: false, mensaje: '', tipo: '' });
@@ -22,11 +21,13 @@ function ReporteFinanzas({ sucursal }) {
     const obtenerVentas = async () => {
       setCargando(true);
       try {
-        const respuesta = await fetch(`https://backend-quesos.onrender.com/api/ventas/${sucursal}`);
-        if (respuesta.ok) {
-          const datos = await respuesta.json();
-          setVentasBD(datos);
-        }
+        const { data, error } = await supabase
+          .from('ventas')
+          .select('*')
+          .eq('sucursal', sucursal)
+          .order('createdAt', { ascending: false });
+
+        if (data) setVentasBD(data);
       } catch (error) {
         console.error("Error al cargar finanzas:", error);
       } finally {
@@ -41,15 +42,15 @@ function ReporteFinanzas({ sucursal }) {
     setTimeout(() => { setNotificacion({ visible: false, mensaje: '', tipo: '' }); }, 3000);
   };
 
-  // --- FUNCIÓN: ELIMINAR VENTA ---
   const ejecutarEliminacionBD = async () => {
     if (!ventaAEliminar) return;
     try {
-      const respuesta = await fetch(`https://backend-quesos.onrender.com/api/ventas/${ventaAEliminar._id}`, {
-        method: 'DELETE',
-      });
-      if (respuesta.ok) {
-        // Actualizamos la pantalla sin recargar
+      const { error } = await supabase
+        .from('ventas')
+        .delete()
+        .eq('_id', ventaAEliminar._id);
+
+      if (!error) {
         setVentasBD(ventasBD.filter((v) => v._id !== ventaAEliminar._id));
         mostrarNotificacion('🗑️ Venta anulada permanentemente', 'exito');
       } else {
@@ -62,7 +63,6 @@ function ReporteFinanzas({ sucursal }) {
     }
   };
 
-  // --- FILTRO INTELIGENTE DE FECHAS ---
   const ventasFiltradas = ventasBD.filter(venta => {
     const fechaVenta = new Date(venta.createdAt);
     
@@ -78,13 +78,11 @@ function ReporteFinanzas({ sucursal }) {
     }
   });
 
-  // --- MATEMÁTICAS ---
   const ventasTotales = ventasFiltradas.reduce((suma, v) => suma + v.totalVenta, 0);
   const costosTotales = ventasFiltradas.reduce((suma, v) => suma + v.totalCosto, 0);
   const gananciaNeta = ventasTotales - costosTotales;
   const cantidadVentas = ventasFiltradas.length;
 
-  // --- GENERADOR DE PDF ---
   const generarPDF = () => {
     const doc = new jsPDF();
     const titulo = tipoFiltro === 'dia' ? `Cierre de Caja - ${fechaFiltro}` : `Reporte Mensual - ${mesFiltro}`;
@@ -163,8 +161,6 @@ function ReporteFinanzas({ sucursal }) {
 
   return (
     <div className="bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-8 max-w-6xl mx-auto mt-4 relative">
-      
-      {/* NOTIFICACIÓN FLOTANTE */}
       {notificacion.visible && (
         <div className={`fixed bottom-5 right-5 sm:bottom-10 sm:right-10 px-6 py-4 rounded-xl shadow-2xl z-50 flex items-center gap-3 transition-all text-white font-bold text-lg
           ${notificacion.tipo === 'exito' ? 'bg-[#2E7D32]' : 'bg-red-600'}`}>
@@ -172,7 +168,6 @@ function ReporteFinanzas({ sucursal }) {
         </div>
       )}
 
-      {/* MODAL CONFIRMAR ELIMINACIÓN */}
       {ventaAEliminar && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-red-100">
@@ -187,10 +182,10 @@ function ReporteFinanzas({ sucursal }) {
             </p>
             
             <div className="flex gap-3">
-              <button onClick={() => setVentaAEliminar(null)} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors">
+              <button onClick={() => setVentaAEliminar(null)} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer">
                 Cancelar
               </button>
-              <button onClick={ejecutarEliminacionBD} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors shadow-md">
+              <button onClick={ejecutarEliminacionBD} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors shadow-md cursor-pointer">
                 Sí, Anular
               </button>
             </div>
@@ -198,29 +193,23 @@ function ReporteFinanzas({ sucursal }) {
         </div>
       )}
       
-      {/* ENCABEZADO Y CONTROLES DE FECHA */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 pb-6 border-b border-gray-100 gap-6">
-        <div className="flex items-center gap-4">
-         
-          <div>
-            <h2 className="text-[#8B5A2B] text-3xl font-bold">Reporte de Finanzas</h2>
-            <p className="text-gray-500 font-medium text-lg">Sucursal: <span className="text-[#FFB800] font-bold">{sucursal}</span></p>
-          </div>
+        <div>
+          <h2 className="text-[#8B5A2B] text-3xl font-bold">Reporte de Finanzas</h2>
+          <p className="text-gray-500 font-medium text-lg">Sucursal: <span className="text-[#FFB800] font-bold">{sucursal}</span></p>
         </div>
         
-        {/* BARRA DE FILTROS MODERNIZADA */}
         <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto bg-gray-50 p-2 rounded-xl border border-gray-200 shadow-sm">
-          
           <div className="flex bg-white p-1 rounded-lg border border-gray-200 shadow-sm w-full sm:w-auto">
             <button 
               onClick={() => setTipoFiltro('dia')}
-              className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold transition-all text-sm ${tipoFiltro === 'dia' ? 'bg-[#FFF0C2] text-[#8B5A2B]' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold transition-all text-sm cursor-pointer ${tipoFiltro === 'dia' ? 'bg-[#FFF0C2] text-[#8B5A2B]' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Por Día
             </button>
             <button 
               onClick={() => setTipoFiltro('mes')}
-              className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold transition-all text-sm ${tipoFiltro === 'mes' ? 'bg-[#FFF0C2] text-[#8B5A2B]' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold transition-all text-sm cursor-pointer ${tipoFiltro === 'mes' ? 'bg-[#FFF0C2] text-[#8B5A2B]' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Por Mes
             </button>
@@ -244,7 +233,7 @@ function ReporteFinanzas({ sucursal }) {
             )}
           </div>
 
-          <button onClick={generarPDF} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-lg font-bold transition-colors shadow-sm active:scale-95">
+          <button onClick={generarPDF} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-lg font-bold transition-colors shadow-sm active:scale-95 cursor-pointer">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
             Exportar PDF
           </button>
@@ -257,7 +246,6 @@ function ReporteFinanzas({ sucursal }) {
         </div>
       ) : (
         <>
-          {/* TARJETAS DE RESUMEN */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
             <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center">
               <h3 className="text-gray-500 font-bold mb-1 uppercase text-sm tracking-wider">Ingresos Totales</h3>
@@ -269,13 +257,12 @@ function ReporteFinanzas({ sucursal }) {
               <p className="text-3xl lg:text-4xl font-black text-red-600">₡{costosTotales.toLocaleString()}</p>
             </div>
             
-            <div className="bg-[#FFF0C2] p-6 rounded-xl border-2 border-[#FFB800] shadow-md transform hover:scale-105 transition-transform flex flex-col justify-center relative overflow-hidden">
+            <div className="bg-[#FFF0C2] p-6 rounded-xl border-2 border-[#FFB800] shadow-md flex flex-col justify-center relative overflow-hidden">
               <h3 className="text-[#8B5A2B] font-bold mb-1 uppercase text-sm tracking-wider relative z-10">Ganancia Neta</h3>
               <p className="text-4xl lg:text-5xl font-black text-[#2E7D32] relative z-10">₡{gananciaNeta.toLocaleString()}</p>
             </div>
           </div>
 
-          {/* TABLA DE VENTAS CON BOTÓN DE BORRAR */}
           <div>
             <h3 className="text-[#8B5A2B] text-xl font-bold mb-4">Registro de Ventas ({cantidadVentas} comprobantes)</h3>
             <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
