@@ -40,7 +40,7 @@ function GestionUsuarios({ onVolver }) {
     e.preventDefault();
     setCargando(true);
     try {
-      const res = await fetch('(https://backend-quesos.onrender.com/api/usuarios', {
+      const res = await fetch('https://backend-quesos.onrender.com/api/usuarios', {
          method: 'POST',
          headers: {'Content-Type': 'application/json'},
          body: JSON.stringify({ usuario: nuevoUser, password: nuevoPass, permisos, rol: 'cajero' })
