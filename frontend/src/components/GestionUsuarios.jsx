@@ -67,7 +67,7 @@ function GestionUsuarios({ onVolver }) {
     if (!usuarioAEliminar) return;
 
     try {
-      const res = await fetch(`(https://backend-quesos.onrender.com/api/usuarios/${usuarioAEliminar._id}`, { 
+      const res = await fetch(`https://backend-quesos.onrender.com/api/usuarios/${usuarioAEliminar._id}`, { 
         method: 'DELETE' 
       });
       
