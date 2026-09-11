@@ -1,10 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error("⚠️ ALERTA: Faltan las variables en tu archivo .env");
-}
+const supabaseUrl = 'https://ujehmcitkgdspowmygaa.supabase.co';
+const supabaseKey = 'pega_aqui_tu_clave_larga_que_empieza_por_eyJ';
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
