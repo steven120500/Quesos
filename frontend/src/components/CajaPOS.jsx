@@ -69,7 +69,7 @@ function CajaPOS({ sucursal }) {
 
       if (respuesta.ok) {
         setProductos(productos.filter((p) => p._id !== productoAEliminar._id));
-        mostrarNotificacion('🗑️ Producto eliminado permanentemente', 'exito');
+        mostrarNotificacion('Producto eliminado permanentemente', 'exito');
       } else {
         mostrarNotificacion('Error al eliminar el producto', 'error');
       }
@@ -238,7 +238,7 @@ function CajaPOS({ sucursal }) {
               <div key={producto._id} className="w-full bg-gray-50 border-2 border-gray-200 hover:border-[#FFB800] rounded-xl p-3 flex items-center justify-between transition-all shadow-sm hover:shadow-md group">
                 <div onClick={() => manejarClickProducto(producto)} className="flex items-center gap-3 sm:gap-4 flex-1 cursor-pointer">
                   <span className="bg-gray-200 text-gray-600 text-xs sm:text-sm font-bold px-2 py-1 rounded-md min-w-[45px] text-center">#{producto.codigo}</span>
-                  <div className="w-10 h-10 bg-[#FFF0C2] rounded-full flex items-center justify-center flex-shrink-0">
+                  <div >
                     <span className="text-lg">{producto.tipoVenta === 'Unidad' ? '' : ''}</span>
                   </div>
                   <span className="font-bold text-gray-700 text-left text-sm sm:text-lg">{producto.nombre}</span>

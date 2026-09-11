@@ -18,7 +18,7 @@ function GestionUsuarios({ onVolver }) {
 
   const obtenerUsuarios = async () => {
     try {
-      const res = await fetch('(https://backend-quesos.onrender.com/api/usuarios');
+      const res = await fetch('https://backend-quesos.onrender.com/api/usuarios');
       const data = await res.json();
       setUsuarios(data);
     } catch (error) {
