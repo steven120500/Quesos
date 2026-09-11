@@ -83,81 +83,176 @@ function ReporteFinanzas({ sucursal }) {
   const gananciaNeta = ventasTotales - costosTotales;
   const cantidadVentas = ventasFiltradas.length;
 
-  const generarPDF = () => {
-    const doc = new jsPDF();
-    const titulo = tipoFiltro === 'dia' ? `Cierre de Caja - ${fechaFiltro}` : `Reporte Mensual - ${mesFiltro}`;
-    const fechaImpresion = new Date().toLocaleString();
+ // --- GENERADOR DE PDF PROFESIONAL CON CUADROS ALINEADOS ---
+ const generarPDF = () => {
+  const doc = new jsPDF();
+  const titulo = tipoFiltro === 'dia' ? `Cierre de Caja Diario - ${fechaFiltro}` : `Reporte Financiero Mensual - ${mesFiltro}`;
+  const fechaImpresion = new Date().toLocaleString();
 
-    const totalEfectivo = ventasFiltradas.filter(v => v.metodoPago === 'Efectivo').reduce((sum, v) => sum + v.totalVenta, 0);
-    const totalSinpe = ventasFiltradas.filter(v => v.metodoPago === 'SINPE').reduce((sum, v) => sum + v.totalVenta, 0);
-    const totalDatafono = ventasFiltradas.filter(v => v.metodoPago === 'Datáfono').reduce((sum, v) => sum + v.totalVenta, 0);
+  const totalEfectivo = ventasFiltradas.filter(v => v.metodoPago === 'Efectivo').reduce((sum, v) => sum + v.totalVenta, 0);
+  const totalSinpe = ventasFiltradas.filter(v => v.metodoPago === 'SINPE').reduce((sum, v) => sum + v.totalVenta, 0);
+  const totalDatafono = ventasFiltradas.filter(v => v.metodoPago === 'Datáfono').reduce((sum, v) => sum + v.totalVenta, 0);
 
-    doc.setFontSize(22);
-    doc.setTextColor(139, 90, 43); 
-    doc.setFont("helvetica", "bold");
-    doc.text('Quesos El Carretón', 14, 20);
-    
-    doc.setFontSize(16);
-    doc.setTextColor(74, 37, 17);
-    doc.setFont("helvetica", "normal");
-    doc.text(titulo, 14, 28);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Sucursal: ${sucursal}   |   Emitido: ${fechaImpresion}`, 14, 35);
+  // ENCABEZADO
+  doc.setFontSize(20);
+  doc.setTextColor(74, 37, 17); // #4A2511
+  doc.setFont("helvetica", "bold");
+  doc.text(`Quesos - Sucursal ${sucursal}`, 14, 18);
 
-    doc.setDrawColor(255, 184, 0); 
-    doc.setFillColor(255, 240, 194); 
-    doc.roundedRect(14, 42, 182, 45, 3, 3, 'FD'); 
+  doc.setFontSize(14);
+  doc.setTextColor(139, 90, 43); // #8B5A2B
+  doc.setFont("helvetica", "normal");
+  doc.text(titulo, 14, 26);
 
-    doc.setFontSize(11);
-    doc.setTextColor(0);
-    doc.setFont("helvetica", "bold");
-    doc.text("Resumen General", 20, 50);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Transacciones: ${cantidadVentas}`, 20, 58);
-    doc.text(`Ingresos Brutos: CRC ${ventasTotales.toLocaleString()}`, 20, 66);
-    doc.text(`Costos de Prod.: CRC ${costosTotales.toLocaleString()}`, 20, 74);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("Desglose de Ingresos", 80, 50);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Efectivo: CRC ${totalEfectivo.toLocaleString()}`, 80, 58);
-    doc.text(`SINPE: CRC ${totalSinpe.toLocaleString()}`, 80, 66);
-    doc.text(`Datáfono: CRC ${totalDatafono.toLocaleString()}`, 80, 74);
+  doc.setFontSize(9);
+  doc.setTextColor(120, 120, 120);
+  doc.text(`Emitido: ${fechaImpresion}   |   Comprobantes emitidos: ${cantidadVentas}`, 14, 33);
 
-    doc.setFontSize(12);
-    doc.setTextColor(46, 125, 50); 
-    doc.setFont("helvetica", "bold");
-    doc.text(`GANANCIA NETA`, 140, 58);
-    doc.setFontSize(14);
-    doc.text(`CRC ${gananciaNeta.toLocaleString()}`, 140, 68);
+  // LÍNEA DIVISORIA
+  doc.setDrawColor(225, 225, 225);
+  doc.line(14, 37, 196, 37);
 
-    const columnasTabla = ["Nº Transaccion", "Fecha y Hora", "Metodo", "Total Cobrado"];
-    const filasTabla = [];
+  // ==========================================
+  // FILA 1: DESGLOSE DE PAGOS (3 CUADROS)
+  // ==========================================
+  const yFila1 = 41;
+  const altoCaja1 = 25;
+  const anchoCaja = 57;
 
-    ventasFiltradas.forEach(venta => {
-      const fecha = new Date(venta.createdAt);
-      filasTabla.push([
-        `TRX-${venta._id.slice(-5).toUpperCase()}`,
-        `${fecha.toLocaleDateString()} - ${fecha.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
-        venta.metodoPago,
-        `CRC ${venta.totalVenta.toLocaleString()}`
-      ]);
-    });
+  // Cuadro 1: Efectivo
+  doc.setDrawColor(180, 220, 195);
+  doc.setFillColor(244, 251, 247);
+  doc.roundedRect(14, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
+  doc.setFontSize(8.5);
+  doc.setTextColor(46, 125, 50);
+  doc.setFont("helvetica", "bold");
+  doc.text("VENTAS EFECTIVO", 18, yFila1 + 7);
+  doc.setFontSize(12.5);
+  doc.setTextColor(30, 70, 32);
+  doc.text(`CRC ${totalEfectivo.toLocaleString()}`, 18, yFila1 + 17);
 
-    autoTable(doc, {
-      startY: 95,
-      head: [columnasTabla],
-      body: filasTabla,
-      theme: 'striped',
-      headStyles: { fillColor: [74, 37, 17], textColor: [255, 184, 0] }, 
-      alternateRowStyles: { fillColor: [249, 250, 251] },
-      styles: { fontSize: 10, cellPadding: 4 },
-    });
+  // Cuadro 2: SINPE Móvil
+  doc.setDrawColor(210, 195, 235);
+  doc.setFillColor(248, 245, 252);
+  doc.roundedRect(76.5, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
+  doc.setFontSize(8.5);
+  doc.setTextColor(106, 27, 154);
+  doc.setFont("helvetica", "bold");
+  doc.text("VENTAS SINPE MÓVIL", 80.5, yFila1 + 7);
+  doc.setFontSize(12.5);
+  doc.setTextColor(74, 20, 140);
+  doc.text(`CRC ${totalSinpe.toLocaleString()}`, 80.5, yFila1 + 17);
 
-    doc.save(`Finanzas_${tipoFiltro}_${sucursal}_${new Date().getTime()}.pdf`);
-  };
+  // Cuadro 3: Datáfono / Tarjeta
+  doc.setDrawColor(190, 215, 245);
+  doc.setFillColor(243, 247, 254);
+  doc.roundedRect(139, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
+  doc.setFontSize(8.5);
+  doc.setTextColor(21, 101, 192);
+  doc.setFont("helvetica", "bold");
+  doc.text("VENTAS DATÁFONO", 143, yFila1 + 7);
+  doc.setFontSize(12.5);
+  doc.setTextColor(13, 71, 161);
+  doc.text(`CRC ${totalDatafono.toLocaleString()}`, 143, yFila1 + 17);
+
+  // ==========================================
+  // FILA 2: BALANCE FINANCIERO (3 CUADROS)
+  // ==========================================
+  const yFila2 = 70;
+  const altoCaja2 = 27;
+
+  // Cuadro 4: Total Ingresos (Suma de todo)
+  doc.setDrawColor(255, 184, 0);
+  doc.setFillColor(255, 252, 242);
+  doc.roundedRect(14, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
+  doc.setFontSize(8.5);
+  doc.setTextColor(139, 90, 43);
+  doc.setFont("helvetica", "bold");
+  doc.text("TOTAL INGRESOS", 18, yFila2 + 7);
+  doc.setFontSize(13.5);
+  doc.setTextColor(74, 37, 17);
+  doc.text(`CRC ${ventasTotales.toLocaleString()}`, 18, yFila2 + 16);
+  doc.setFontSize(7.5);
+  doc.setTextColor(120, 120, 120);
+  doc.setFont("helvetica", "normal");
+  doc.text("Suma total recaudada", 18, yFila2 + 22);
+
+  // Cuadro 5: Total Costos de Producción
+  doc.setDrawColor(239, 154, 154);
+  doc.setFillColor(255, 245, 245);
+  doc.roundedRect(76.5, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
+  doc.setFontSize(8.5);
+  doc.setTextColor(198, 40, 40);
+  doc.setFont("helvetica", "bold");
+  doc.text("TOTAL COSTOS", 80.5, yFila2 + 7);
+  doc.setFontSize(13.5);
+  doc.setTextColor(183, 28, 28);
+  doc.text(`CRC ${costosTotales.toLocaleString()}`, 80.5, yFila2 + 16);
+  doc.setFontSize(7.5);
+  doc.setTextColor(120, 120, 120);
+  doc.setFont("helvetica", "normal");
+  doc.text("Costos de productos", 80.5, yFila2 + 22);
+
+  // Cuadro 6: Ganancia Neta
+  doc.setDrawColor(46, 125, 50);
+  doc.setFillColor(232, 245, 233);
+  doc.roundedRect(139, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
+  doc.setFontSize(9);
+  doc.setTextColor(27, 94, 32);
+  doc.setFont("helvetica", "bold");
+  doc.text("GANANCIA NETA", 143, yFila2 + 7);
+  doc.setFontSize(14.5);
+  doc.setTextColor(27, 94, 32);
+  doc.text(`CRC ${gananciaNeta.toLocaleString()}`, 143, yFila2 + 16);
+  doc.setFontSize(7.5);
+  doc.setTextColor(46, 125, 50);
+  doc.setFont("helvetica", "bold");
+  doc.text("Margen neto libre", 143, yFila2 + 22);
+
+  // ==========================================
+  // TABLA DE TRANSACCIONES DETALLADA
+  // ==========================================
+  const columnasTabla = ["Nº Transacción", "Fecha y Hora", "Método", "Total Cobrado"];
+  const filasTabla = [];
+
+  ventasFiltradas.forEach(venta => {
+    const fecha = new Date(venta.createdAt);
+    filasTabla.push([
+      `TRX-${venta._id.slice(-5).toUpperCase()}`,
+      `${fecha.toLocaleDateString()} - ${fecha.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+      venta.metodoPago,
+      `CRC ${venta.totalVenta.toLocaleString()}`
+    ]);
+  });
+
+  autoTable(doc, {
+    startY: 104,
+    head: [columnasTabla],
+    body: filasTabla,
+    theme: 'striped',
+    headStyles: {
+      fillColor:  '#4A2511',
+      textColor: [255, 184, 0],
+      fontStyle: 'bold',
+      fontSize: 9
+    },
+    alternateRowStyles: { fillColor: [250, 250, 251] },
+    styles: { fontSize: 9, cellPadding: 3.5 },
+    columnStyles: {
+      0: { cellWidth: 38 },
+      1: { cellWidth: 55 },
+      2: { cellWidth: 38 },
+      3: { halign: 'right', fontStyle: 'bold' }
+    },
+    didDrawPage: function () {
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text('BeeSoft POS - Sistema de Gestion Comercial | Soporte: +506 8802-8216', 14, 290);
+    }
+  });
+
+  doc.save(`Finanzas_${tipoFiltro}_${sucursal}_${new Date().getTime()}.pdf`);
+};
 
   return (
     <div className="bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-8 max-w-6xl mx-auto mt-4 relative">
@@ -169,7 +264,7 @@ function ReporteFinanzas({ sucursal }) {
       )}
 
       {ventaAEliminar && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-red-100">
             <div className="flex justify-center mb-4 text-red-500">
               <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
@@ -294,8 +389,8 @@ function ReporteFinanzas({ sucursal }) {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <span className={`px-3 py-1 rounded-full font-bold text-xs
-                            ${venta.metodoPago === 'SINPE' ? 'bg-purple-100 text-purple-700' : 
-                              venta.metodoPago === 'Efectivo' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}
+                            ${venta.metodoPago === 'SINPE' ? 'bg-gray-100 text-gray-700' : 
+                              venta.metodoPago === 'Efectivo' ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-700'}`}
                           >
                             {venta.metodoPago}
                           </span>
