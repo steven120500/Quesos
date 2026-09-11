@@ -10,7 +10,7 @@ function Login({ onLoginSuccess }) {
     e.preventDefault();
     setProcesandoLogin(true);
     try {
-      const res = await fetch('(https://backend-quesos.onrender.com/api/usuarios/login', {
+      const res = await fetch('https://backend-quesos.onrender.com/api/usuarios/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario: username, password })
