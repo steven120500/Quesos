@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 function AgregarProducto({ sucursal }) {
@@ -9,40 +9,79 @@ function AgregarProducto({ sucursal }) {
   
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' }); 
   const [cargando, setCargando] = useState(false); 
+  const [codigoEstimado, setCodigoEstimado] = useState('...');
+
+  // Solo para mostrar una vista previa aproximada en pantalla
+  const refrescarCodigoPreview = async () => {
+    try {
+      const { data } = await supabase.from('productos').select('codigo');
+      const numeros = (data || []).map(p => parseInt(p.codigo, 10)).filter(n => !isNaN(n));
+      const siguiente = numeros.length > 0 ? Math.max(...numeros) + 1 : 1;
+      setCodigoEstimado(String(siguiente).padStart(3, '0'));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    refrescarCodigoPreview();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault(); 
     setCargando(true); 
-    
-    // El código se envía como 'AUTO' para que Supabase le asigne el correlativo exacto
-    const datosProducto = {
-      codigo: 'AUTO',
-      nombre: nombre.trim(),
-      precioCosto: Number(precioCosto), 
-      precioVenta: Number(precioVenta), 
-      sucursal: 'General', // Queda disponible para Sarchí y Mercado simultáneamente
-      tipoVenta: tipoVenta 
-    };
 
     try {
-      const { data, error } = await supabase
-        .from('productos')
-        .insert([datosProducto])
-        .select()
-        .single();
+      let guardado = false;
+      let intentos = 0;
+      let codigoAsignado = '';
 
-      if (!error && data) {
-        const codigoAsignado = data.codigo || 'OK';
+      // Bucle de asignación segura: busca el número más alto en ese instante y guarda
+      while (!guardado && intentos < 3) {
+        intentos++;
+
+        // 1. Busca en tiempo real el último número en la base de datos
+        const { data: productosActuales } = await supabase
+          .from('productos')
+          .select('codigo');
+
+        const numeros = (productosActuales || [])
+          .map(p => parseInt(p.codigo, 10))
+          .filter(n => !isNaN(n));
+
+        const siguienteNumero = numeros.length > 0 ? Math.max(...numeros) + 1 : 1;
+        codigoAsignado = String(siguienteNumero).padStart(3, '0');
+
+        // 2. Intenta guardar con el número disponible
+        const { error } = await supabase
+          .from('productos')
+          .insert([{
+            codigo: codigoAsignado,
+            nombre: nombre.trim(),
+            precioCosto: Number(precioCosto),
+            precioVenta: Number(precioVenta),
+            sucursal: 'General',
+            tipoVenta: tipoVenta
+          }]);
+
+        // Si no dio error de duplicado, se guardó con éxito
+        if (!error) {
+          guardado = true;
+        }
+      }
+
+      if (guardado) {
         setMensaje({ 
-          texto: `¡Producto #${codigoAsignado} - "${nombre}" guardado para ambas sucursales!`, 
+          texto: `¡Producto #${codigoAsignado} - "${nombre}" guardado con éxito!`, 
           tipo: 'exito' 
         });
         setNombre('');
         setPrecioCosto('');
         setPrecioVenta('');
         setTipoVenta('Peso');
+        refrescarCodigoPreview();
       } else {
-        setMensaje({ texto: 'Error al guardar el producto en la base de datos.', tipo: 'error' });
+        setMensaje({ texto: 'Error al registrar el producto. Inténtalo de nuevo.', tipo: 'error' });
       }
     } catch (error) {
       console.error('Error de conexión:', error);
@@ -59,7 +98,7 @@ function AgregarProducto({ sucursal }) {
         <div>
           <h2 className="text-[#8B5A2B] text-2xl font-bold">Crear Nuevo Producto</h2>
           <p className="text-gray-500 font-medium">
-            Catálogo: <span className="text-[#2E7D32] font-bold">Compartido (Sarchí y Mercado)</span>
+            Catálogo: <span className="text-[#2E7D32] font-bold">Compartido (Sarchí y Poás)</span>
           </p>
         </div>
       </div>
@@ -89,9 +128,13 @@ function AgregarProducto({ sucursal }) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="md:col-span-1">
             <label className="block text-[#4A2511] font-bold mb-2 text-lg">Código</label>
-            <div className="w-full bg-gray-100 border-2 border-dashed border-gray-300 text-[#8B5A2B] font-black rounded-xl px-4 py-4 text-center text-lg shadow-inner flex items-center justify-center">
-              AUTO
-            </div>
+            <input 
+              type="text" 
+              disabled 
+              value={`#${codigoEstimado}`} 
+              className="w-full bg-gray-200 border-2 border-gray-300 text-[#8B5A2B] font-black rounded-xl px-4 py-4 text-center text-xl cursor-not-allowed shadow-inner transition-all" 
+              title="El código correlativo final se confirma automáticamente al guardar"
+            />
           </div>
           <div className="md:col-span-3">
             <label className="block text-[#4A2511] font-bold mb-2 text-lg">Nombre del Producto</label>

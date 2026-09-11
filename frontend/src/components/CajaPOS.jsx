@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 function CajaPOS({ sucursal }) {
@@ -15,7 +15,11 @@ function CajaPOS({ sucursal }) {
   const [notificacion, setNotificacion] = useState({ visible: false, mensaje: '', tipo: '' });
   const [productoAEliminar, setProductoAEliminar] = useState(null);
 
-  // Carga todo el catálogo de productos ordenado por código correlativo
+  // Referencia para mantener el foco en el buscador siempre
+  const inputBusquedaRef = useRef(null);
+  const inputPesoRef = useRef(null);
+
+  // Carga el catálogo de productos
   useEffect(() => {
     const obtenerProductos = async () => {
       setCargando(true);
@@ -35,6 +39,27 @@ function CajaPOS({ sucursal }) {
     obtenerProductos();
   }, [sucursal]);
 
+  // Enfoca el buscador al iniciar y cada vez que se cierra un modal
+  useEffect(() => {
+    if (!productoParaPesar && !productoAEliminar && inputBusquedaRef.current) {
+      inputBusquedaRef.current.focus();
+    }
+  }, [productoParaPesar, productoAEliminar]);
+
+  // Atajo global de teclado: Shift para cobrar venta
+  useEffect(() => {
+    const manejarAtajoGlobal = (e) => {
+      if (e.key === 'Shift') {
+        if (carrito.length > 0 && !procesando) {
+          e.preventDefault();
+          procesarVenta();
+        }
+      }
+    };
+    window.addEventListener('keydown', manejarAtajoGlobal);
+    return () => window.removeEventListener('keydown', manejarAtajoGlobal);
+  }, [carrito, procesando]);
+
   const mostrarNotificacion = (mensaje, tipo) => {
     setNotificacion({ visible: true, mensaje, tipo });
     setTimeout(() => { setNotificacion({ visible: false, mensaje: '', tipo: '' }); }, 3000);
@@ -48,8 +73,58 @@ function CajaPOS({ sucursal }) {
       } else {
         setCarrito([...carrito, { ...producto, cantidad: 1 }]);
       }
+      setBusqueda('');
+      if (inputBusquedaRef.current) inputBusquedaRef.current.focus();
     } else {
       setProductoParaPesar(producto);
+    }
+  };
+
+  // ATAJO DE TECLADO EN EL BUSCADOR (ENTER)
+  const manejarKeyDownBusqueda = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const texto = busqueda.trim();
+      if (!texto) return;
+
+      // 1. Busca coincidencia exacta por código (ej. '1' coincide con '001')
+      const productoPorCodigo = productos.find(
+        (p) => p.codigo === texto || parseInt(p.codigo, 10) === parseInt(texto, 10)
+      );
+
+      if (productoPorCodigo) {
+        manejarClickProducto(productoPorCodigo);
+        return;
+      }
+
+      // 2. Si hay un único resultado en la lista filtrada, selecciónalo
+      if (productosFiltrados.length === 1) {
+        manejarClickProducto(productosFiltrados[0]);
+      }
+    }
+  };
+
+  const confirmarPeso = (e) => {
+    e.preventDefault();
+    const kilos = parseFloat(pesoGramos) / 1000;
+    if (isNaN(kilos) || kilos <= 0) return;
+
+    const itemExistente = carrito.find((item) => item._id === productoParaPesar._id);
+    if (itemExistente) {
+      setCarrito(carrito.map((item) => item._id === productoParaPesar._id ? { ...item, cantidad: item.cantidad + kilos } : item));
+    } else {
+      setCarrito([...carrito, { ...productoParaPesar, cantidad: kilos }]);
+    }
+    setProductoParaPesar(null);
+    setPesoGramos('');
+    setBusqueda('');
+  };
+
+  // Permite cerrar el modal de peso con tecla Escape
+  const manejarKeyDownPeso = (e) => {
+    if (e.key === 'Escape') {
+      setProductoParaPesar(null);
+      setPesoGramos('');
     }
   };
 
@@ -79,21 +154,6 @@ function CajaPOS({ sucursal }) {
     }
   };
 
-  const confirmarPeso = (e) => {
-    e.preventDefault();
-    const kilos = parseFloat(pesoGramos) / 1000;
-    if (isNaN(kilos) || kilos <= 0) return;
-
-    const itemExistente = carrito.find((item) => item._id === productoParaPesar._id);
-    if (itemExistente) {
-      setCarrito(carrito.map((item) => item._id === productoParaPesar._id ? { ...item, cantidad: item.cantidad + kilos } : item));
-    } else {
-      setCarrito([...carrito, { ...productoParaPesar, cantidad: kilos }]);
-    }
-    setProductoParaPesar(null);
-    setPesoGramos('');
-  };
-
   const eliminarDelCarrito = (idProducto) => {
     setCarrito(carrito.filter((item) => item._id !== idProducto));
   };
@@ -117,7 +177,6 @@ function CajaPOS({ sucursal }) {
         precioCosto: item.precioCosto
       }));
 
-      // La venta se registra con la sucursal actual para que el arqueo de caja sea independiente
       const datosVenta = {
         sucursal: sucursal,
         productos: productosVenta,
@@ -134,6 +193,7 @@ function CajaPOS({ sucursal }) {
         mostrarNotificacion('¡Venta registrada con éxito!', 'exito');
         setCarrito([]); 
         setMetodoPago('Efectivo'); 
+        if (inputBusquedaRef.current) inputBusquedaRef.current.focus();
       } else {
         mostrarNotificacion('Hubo un error al registrar la venta.', 'error');
       }
@@ -178,9 +238,9 @@ function CajaPOS({ sucursal }) {
         </div>
       )}
 
-      {/* --- MODAL DE PESO (FONDO CLARO CON DESENFOQUE SUAVE) --- */}
+      {/* --- MODAL DE PESO --- */}
       {productoParaPesar && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" onKeyDown={manejarKeyDownPeso}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-[#FFF0C2]">
             <h3 className="text-xl font-bold text-[#8B5A2B] mb-1">Ingresar Peso</h3>
             <p className="text-gray-600 mb-4 font-medium text-lg">{productoParaPesar.nombre}</p>
@@ -195,37 +255,63 @@ function CajaPOS({ sucursal }) {
                 </div>
               </div>
 
-              <label className="block text-sm font-bold text-gray-700 mb-2">Peso personalizado (gramos):</label>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Peso en gramos (Enter para agregar):</label>
               <div className="relative mb-6">
-                <input type="number" autoFocus required min="1" value={pesoGramos} onChange={(e) => setPesoGramos(e.target.value)} onWheel={(e) => e.currentTarget.blur()} className="w-full bg-gray-50 border-2 border-gray-300 focus:border-[#FFB800] rounded-xl px-4 py-3 text-2xl font-black text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="Ej: 350" />
+                <input 
+                  type="number" 
+                  ref={inputPesoRef}
+                  autoFocus 
+                  required 
+                  min="1" 
+                  value={pesoGramos} 
+                  onChange={(e) => setPesoGramos(e.target.value)} 
+                  onWheel={(e) => e.currentTarget.blur()} 
+                  className="w-full bg-gray-50 border-2 border-gray-300 focus:border-[#FFB800] rounded-xl px-4 py-3 text-2xl font-black text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                  placeholder="Ej: 350" 
+                />
                 <span className="absolute right-4 top-4 text-gray-400 font-bold text-lg">gr</span>
               </div>
               
               <div className="flex gap-3">
-                <button type="button" onClick={() => { setProductoParaPesar(null); setPesoGramos(''); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer">Cancelar</button>
-                <button type="submit" className="flex-1 bg-[#2E7D32] hover:bg-green-800 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer shadow-md">Agregar</button>
+                <button type="button" onClick={() => { setProductoParaPesar(null); setPesoGramos(''); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer text-sm">
+                  Cancelar (Esc)
+                </button>
+                <button type="submit" className="flex-1 bg-[#2E7D32] hover:bg-green-800 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer shadow-md">
+                  Agregar ↵
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
+      {/* --- SECCIÓN PRODUCTOS --- */}
       <section className="w-full lg:w-2/3 bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-4 flex flex-col lg:h-[calc(100vh-140px)] min-h-[500px]">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b border-gray-100 gap-4">
           <h2 className="text-[#8B5A2B] text-2xl font-bold whitespace-nowrap">Caja - {sucursal}</h2>
           <div className="relative w-full sm:w-1/2 md:w-2/3 lg:w-1/2">
-            <input type="text" placeholder="Buscar por código o nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-[#FFB800] focus:bg-white focus:outline-none transition-colors text-gray-700 shadow-inner" />
+            <input 
+              type="text" 
+              ref={inputBusquedaRef}
+              placeholder="Código o nombre (Enter para agregar)..." 
+              value={busqueda} 
+              onChange={(e) => setBusqueda(e.target.value)} 
+              onKeyDown={manejarKeyDownBusqueda}
+              className="w-full pl-4 pr-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-[#FFB800] focus:bg-white focus:outline-none transition-colors text-gray-700 shadow-inner text-base font-medium" 
+            />
           </div>
         </div>
 
         <div className="flex flex-col gap-3 overflow-y-auto pr-2 pb-4">
           {cargando ? (
-            <div className="py-10 text-center text-gray-500 font-bold text-lg animate-pulse">Cargando catálogo compartido...</div>
+            <div className="py-10 text-center text-gray-500 font-bold text-lg animate-pulse">Cargando catálogo...</div>
           ) : productosFiltrados.length > 0 ? (
             productosFiltrados.map((producto) => (
               <div key={producto._id} className="w-full bg-gray-50 border-2 border-gray-200 hover:border-[#FFB800] rounded-xl p-3 flex items-center justify-between transition-all shadow-sm hover:shadow-md group">
                 <div onClick={() => manejarClickProducto(producto)} className="flex items-center gap-3 sm:gap-4 flex-1 cursor-pointer">
-                  <span className="bg-gray-200 text-gray-600 text-xs sm:text-sm font-bold px-2 py-1 rounded-md min-w-[45px] text-center">#{producto.codigo}</span>
+                  <span className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] text-xs sm:text-sm font-black px-2.5 py-1 rounded-md min-w-[45px] text-center">
+                    #{producto.codigo}
+                  </span>
                   <span className="font-bold text-gray-700 text-left text-sm sm:text-lg">{producto.nombre}</span>
                 </div>
                 
@@ -247,11 +333,12 @@ function CajaPOS({ sucursal }) {
               </div>
             ))
           ) : (
-            <div className="py-10 text-center text-gray-400 font-bold text-lg">No se encontraron productos en el inventario.</div>
+            <div className="py-10 text-center text-gray-400 font-bold text-lg">No se encontraron productos.</div>
           )}
         </div>
       </section>
 
+      {/* --- PANEL DE TICKET / COBRO --- */}
       <aside className="w-full lg:w-1/3 bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-4 flex flex-col lg:h-[calc(100vh-140px)] min-h-[400px]">
         <h2 className="text-[#8B5A2B] text-2xl font-bold mb-4 border-b border-gray-100 pb-2">Ticket de Venta</h2>
         
@@ -300,7 +387,7 @@ function CajaPOS({ sucursal }) {
         </div>
 
         <button onClick={procesarVenta} disabled={carrito.length === 0 || procesando} className={`font-bold py-4 px-4 rounded-xl shadow-lg transition-all text-xl w-full active:scale-95 flex justify-center items-center gap-2 ${carrito.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : procesando ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-[#2E7D32] hover:bg-green-800 text-white cursor-pointer'}`}>
-          {procesando ? <span className="animate-pulse">Procesando...</span> : <>Cobrar Venta</>}
+          {procesando ? <span className="animate-pulse">Procesando...</span> : <>Cobrar Venta (Shift)</>}
         </button>
       </aside>
     </div>
