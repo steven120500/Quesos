@@ -15,6 +15,7 @@ function CajaPOS({ sucursal }) {
   const [notificacion, setNotificacion] = useState({ visible: false, mensaje: '', tipo: '' });
   const [productoAEliminar, setProductoAEliminar] = useState(null);
 
+  // Carga todo el catálogo de productos ordenado por código correlativo
   useEffect(() => {
     const obtenerProductos = async () => {
       setCargando(true);
@@ -22,7 +23,7 @@ function CajaPOS({ sucursal }) {
         const { data, error } = await supabase
           .from('productos')
           .select('*')
-          .eq('sucursal', sucursal);
+          .order('codigo', { ascending: true });
 
         if (data) setProductos(data);
       } catch (error) {
@@ -116,6 +117,7 @@ function CajaPOS({ sucursal }) {
         precioCosto: item.precioCosto
       }));
 
+      // La venta se registra con la sucursal actual para que el arqueo de caja sea independiente
       const datosVenta = {
         sucursal: sucursal,
         productos: productosVenta,
@@ -187,9 +189,9 @@ function CajaPOS({ sucursal }) {
               <div className="mb-4">
                 <label className="block text-sm font-bold text-gray-700 mb-2">Tamaños frecuentes:</label>
                 <div className="grid grid-cols-3 gap-2">
-                  <button type="button" onClick={() => setPesoGramos('250')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm">250g</button>
-                  <button type="button" onClick={() => setPesoGramos('500')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm">500g</button>
-                  <button type="button" onClick={() => setPesoGramos('1000')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm">1 Kg</button>
+                  <button type="button" onClick={() => setPesoGramos('250')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm cursor-pointer">250g</button>
+                  <button type="button" onClick={() => setPesoGramos('500')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm cursor-pointer">500g</button>
+                  <button type="button" onClick={() => setPesoGramos('1000')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm cursor-pointer">1 Kg</button>
                 </div>
               </div>
 
@@ -210,7 +212,7 @@ function CajaPOS({ sucursal }) {
 
       <section className="w-full lg:w-2/3 bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-4 flex flex-col lg:h-[calc(100vh-140px)] min-h-[500px]">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b border-gray-100 gap-4">
-          <h2 className="text-[#8B5A2B] text-2xl font-bold whitespace-nowrap">Productos - {sucursal}</h2>
+          <h2 className="text-[#8B5A2B] text-2xl font-bold whitespace-nowrap">Caja - {sucursal}</h2>
           <div className="relative w-full sm:w-1/2 md:w-2/3 lg:w-1/2">
             <input type="text" placeholder="Buscar por código o nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-[#FFB800] focus:bg-white focus:outline-none transition-colors text-gray-700 shadow-inner" />
           </div>
@@ -218,7 +220,7 @@ function CajaPOS({ sucursal }) {
 
         <div className="flex flex-col gap-3 overflow-y-auto pr-2 pb-4">
           {cargando ? (
-            <div className="py-10 text-center text-gray-500 font-bold text-lg animate-pulse">Cargando inventario...</div>
+            <div className="py-10 text-center text-gray-500 font-bold text-lg animate-pulse">Cargando catálogo compartido...</div>
           ) : productosFiltrados.length > 0 ? (
             productosFiltrados.map((producto) => (
               <div key={producto._id} className="w-full bg-gray-50 border-2 border-gray-200 hover:border-[#FFB800] rounded-xl p-3 flex items-center justify-between transition-all shadow-sm hover:shadow-md group">
@@ -245,7 +247,7 @@ function CajaPOS({ sucursal }) {
               </div>
             ))
           ) : (
-            <div className="py-10 text-center text-gray-400 font-bold text-lg">No se encontraron productos.</div>
+            <div className="py-10 text-center text-gray-400 font-bold text-lg">No se encontraron productos en el inventario.</div>
           )}
         </div>
       </section>
