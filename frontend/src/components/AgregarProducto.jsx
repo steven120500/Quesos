@@ -66,7 +66,7 @@ function AgregarProducto({ sucursal }) {
       });
 
       if (respuesta.ok) {
-        setMensaje({ texto: `¡Producto #${codigoAutomatico} - "${nombre}" guardado en MongoDB!`, tipo: 'exito' });
+        setMensaje({ texto: `¡Producto #${codigoAutomatico} - "${nombre}" guardado!`, tipo: 'exito' });
         setNombre('');
         setPrecioCosto('');
         setPrecioVenta('');

@@ -85,7 +85,7 @@ function GestionUsuarios({ onVolver }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8 flex flex-col items-center relative">
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-8 flex flex-col items-center relative">
       
       {/* --- NOTIFICACIÓN FLOTANTE --- */}
       {notificacion.visible && (
@@ -126,17 +126,21 @@ function GestionUsuarios({ onVolver }) {
         </div>
       )}
 
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-[#FFF0C2]">
-        <div className="bg-[#4A2511] p-6 flex justify-between items-center text-[#FFB800]">
-          <h2 className="text-3xl font-bold"> Gestión de Usuarios</h2>
-          <button onClick={onVolver} className="bg-white/20 hover:bg-white/30 px-6 py-2 rounded-lg font-bold transition-colors text-white cursor-pointer">
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-[#FFF0C2]">
+        
+        {/* ENCABEZADO RESPONSIVO */}
+        <div className="bg-[#4A2511] p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-center text-[#FFB800] gap-4">
+          <h2 className="text-2xl sm:text-3xl font-bold text-center sm:text-left">Gestión de Usuarios</h2>
+          <button onClick={onVolver} className="w-full sm:w-auto bg-white/20 hover:bg-white/30 px-6 py-3 sm:py-2 rounded-lg font-bold transition-colors text-white cursor-pointer text-center">
             ← Volver a Sucursales
           </button>
         </div>
         
-        <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* CONTENEDOR PRINCIPAL: Pasa a 1 columna en móvil y mantiene el orden lógico */}
+        <div className="p-4 sm:p-8 flex flex-col lg:flex-row gap-8">
+          
           {/* Formulario de Creación */}
-          <div className="col-span-1 bg-gray-50 p-6 rounded-2xl border border-gray-200">
+          <div className="w-full lg:w-1/3 bg-gray-50 p-6 rounded-2xl border border-gray-200 flex-shrink-0">
             <h3 className="text-xl font-bold text-[#8B5A2B] mb-4">Crear Nuevo Cajero</h3>
             <form onSubmit={crearUsuario} className="space-y-4">
               <div>
@@ -170,36 +174,37 @@ function GestionUsuarios({ onVolver }) {
             </form>
           </div>
           
-          {/* Lista de Usuarios */}
-          <div className="col-span-2">
+          {/* Lista de Usuarios con scroll horizontal en móvil */}
+          <div className="w-full lg:w-2/3">
             <h3 className="text-xl font-bold text-[#8B5A2B] mb-4">Usuarios Activos</h3>
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-              <table className="min-w-full divide-y divide-gray-200 text-left">
+            
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto w-full">
+              <table className="min-w-full divide-y divide-gray-200 text-left whitespace-nowrap">
                 <thead className="bg-[#FFF0C2] text-[#8B5A2B]">
                   <tr>
-                    <th className="px-6 py-3 text-sm font-bold">Usuario</th>
-                    <th className="px-6 py-3 text-sm font-bold">Rol</th>
-                    <th className="px-6 py-3 text-sm font-bold">Accesos</th>
-                    <th className="px-6 py-3 text-sm font-bold text-center">Acciones</th>
+                    <th className="px-4 sm:px-6 py-3 text-sm font-bold">Usuario</th>
+                    <th className="px-4 sm:px-6 py-3 text-sm font-bold">Rol</th>
+                    <th className="px-4 sm:px-6 py-3 text-sm font-bold">Accesos</th>
+                    <th className="px-4 sm:px-6 py-3 text-sm font-bold text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {usuarios.map(u => (
                     <tr key={u._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-bold text-gray-800 capitalize">{u.usuario}</td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 sm:px-6 py-4 font-bold text-gray-800 capitalize">{u.usuario}</td>
+                      <td className="px-4 sm:px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${u.rol === 'superadmin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                           {u.rol}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {u.permisos.includes('pos') && <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-bold">Caja</span>}
-                          {u.permisos.includes('agregar') && <span className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded font-bold">Prod</span>}
-                          {u.permisos.includes('finanzas') && <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded font-bold">Finanz</span>}
+                      <td className="px-4 sm:px-6 py-4">
+                        <div className="flex flex-wrap gap-1 w-32 sm:w-auto">
+                          {u.permisos.includes('pos') && <span className="bg-green-100 text-green-700 text-[10px] sm:text-xs px-2 py-1 rounded font-bold">Caja</span>}
+                          {u.permisos.includes('agregar') && <span className="bg-orange-100 text-orange-700 text-[10px] sm:text-xs px-2 py-1 rounded font-bold">Prod</span>}
+                          {u.permisos.includes('finanzas') && <span className="bg-red-100 text-red-700 text-[10px] sm:text-xs px-2 py-1 rounded font-bold">Finanz</span>}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-4 sm:px-6 py-4 text-center">
                         {u.rol !== 'superadmin' && (
                           <button 
                             onClick={() => setUsuarioAEliminar(u)} 

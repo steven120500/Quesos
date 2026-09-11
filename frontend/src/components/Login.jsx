@@ -39,10 +39,10 @@ function Login({ onLoginSuccess }) {
     <div className="min-h-screen flex flex-col items-center justify-center p-4" style={premiumBackground}>
       <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md border-4 border-[#FFF0C2] transform transition-all">
         <div className="flex justify-center mb-6">
-          <div className="w-20 h-20 bg-[#FFF0C2] rounded-full flex items-center justify-center text-4xl shadow-inner">🔒</div>
+         
         </div>
         <h2 className="text-3xl font-bold text-center text-[#8B5A2B] mb-2">Acceso al Sistema</h2>
-        <p className="text-center text-gray-500 font-medium mb-8">Quesos El Carretón POS</p>
+     
         
         <form onSubmit={manejarLogin} className="space-y-4">
           <div>
