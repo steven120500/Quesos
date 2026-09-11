@@ -22,7 +22,7 @@ function ReporteFinanzas({ sucursal }) {
     const obtenerVentas = async () => {
       setCargando(true);
       try {
-        const respuesta = await fetch(`(https://backend-quesos.onrender.com/api/ventas/${sucursal}`);
+        const respuesta = await fetch(`https://backend-quesos.onrender.com/api/ventas/${sucursal}`);
         if (respuesta.ok) {
           const datos = await respuesta.json();
           setVentasBD(datos);
