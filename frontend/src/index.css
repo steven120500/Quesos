@@ -1,0 +1,14 @@
+/* 1. Sintaxis obligatoria para la nueva versión de Tailwind */
+@import "tailwindcss";
+
+/* 2. Importación de una tipografía Premium (Outfit o Inter son ideales para sistemas web) */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+
+body {
+  background-color: #FAFAFA;
+  font-family: 'Outfit', sans-serif; 
+  
+  /* 3. Suavizado de fuentes (Secreto de diseño para pantallas de alta resolución) */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
