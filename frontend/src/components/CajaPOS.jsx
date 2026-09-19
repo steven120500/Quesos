@@ -10,12 +10,22 @@ function CajaPOS({ sucursal }) {
   const [metodoPago, setMetodoPago] = useState('Efectivo');
   const [procesando, setProcesando] = useState(false);
 
+  // Estados para peso y precio redondeado
   const [productoParaPesar, setProductoParaPesar] = useState(null);
   const [pesoGramos, setPesoGramos] = useState('');
+  const [precioCobrar, setPrecioCobrar] = useState('');
+
   const [notificacion, setNotificacion] = useState({ visible: false, mensaje: '', tipo: '' });
   const [productoAEliminar, setProductoAEliminar] = useState(null);
 
-  // Referencia para mantener el foco en el buscador siempre
+  // Estados para editar producto (lápiz)
+  const [productoAEditar, setProductoAEditar] = useState(null);
+  const [nombreEdit, setNombreEdit] = useState('');
+  const [precioCostoEdit, setPrecioCostoEdit] = useState('');
+  const [precioVentaEdit, setPrecioVentaEdit] = useState('');
+  const [guardandoEdit, setGuardandoEdit] = useState(false);
+
+  // Referencias para foco
   const inputBusquedaRef = useRef(null);
   const inputPesoRef = useRef(null);
 
@@ -41,10 +51,10 @@ function CajaPOS({ sucursal }) {
 
   // Enfoca el buscador al iniciar y cada vez que se cierra un modal
   useEffect(() => {
-    if (!productoParaPesar && !productoAEliminar && inputBusquedaRef.current) {
+    if (!productoParaPesar && !productoAEliminar && !productoAEditar && inputBusquedaRef.current) {
       inputBusquedaRef.current.focus();
     }
-  }, [productoParaPesar, productoAEliminar]);
+  }, [productoParaPesar, productoAEliminar, productoAEditar]);
 
   // Atajo global de teclado: Shift para cobrar venta
   useEffect(() => {
@@ -69,14 +79,37 @@ function CajaPOS({ sucursal }) {
     if (producto.tipoVenta === 'Unidad') {
       const itemExistente = carrito.find((item) => item._id === producto._id);
       if (itemExistente) {
-        setCarrito(carrito.map((item) => item._id === producto._id ? { ...item, cantidad: item.cantidad + 1 } : item));
+        setCarrito(carrito.map((item) => item._id === producto._id ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precioVenta } : item));
       } else {
-        setCarrito([...carrito, { ...producto, cantidad: 1 }]);
+        setCarrito([...carrito, { ...producto, cantidad: 1, subtotal: producto.precioVenta }]);
       }
       setBusqueda('');
       if (inputBusquedaRef.current) inputBusquedaRef.current.focus();
     } else {
       setProductoParaPesar(producto);
+      setPesoGramos('');
+      setPrecioCobrar('');
+    }
+  };
+
+  // Al escribir los gramos, calcula automáticamente el precio sugerido
+  const manejarCambioGramos = (valor) => {
+    setPesoGramos(valor);
+    const gr = parseFloat(valor);
+    if (!isNaN(gr) && gr > 0 && productoParaPesar) {
+      const sugerido = Math.round((gr / 1000) * productoParaPesar.precioVenta);
+      setPrecioCobrar(String(sugerido));
+    } else {
+      setPrecioCobrar('');
+    }
+  };
+
+  // Botón para redondear al múltiplo de 50 o 100 más cercano
+  const redondearPrecio = (multiplo) => {
+    const actual = Number(precioCobrar);
+    if (!isNaN(actual) && actual > 0) {
+      const redondeado = Math.round(actual / multiplo) * multiplo;
+      setPrecioCobrar(String(redondeado));
     }
   };
 
@@ -87,7 +120,6 @@ function CajaPOS({ sucursal }) {
       const texto = busqueda.trim();
       if (!texto) return;
 
-      // 1. Busca coincidencia exacta por código (ej. '1' coincide con '001')
       const productoPorCodigo = productos.find(
         (p) => p.codigo === texto || parseInt(p.codigo, 10) === parseInt(texto, 10)
       );
@@ -97,7 +129,6 @@ function CajaPOS({ sucursal }) {
         return;
       }
 
-      // 2. Si hay un único resultado en la lista filtrada, selecciónalo
       if (productosFiltrados.length === 1) {
         manejarClickProducto(productosFiltrados[0]);
       }
@@ -109,25 +140,83 @@ function CajaPOS({ sucursal }) {
     const kilos = parseFloat(pesoGramos) / 1000;
     if (isNaN(kilos) || kilos <= 0) return;
 
-    const itemExistente = carrito.find((item) => item._id === productoParaPesar._id);
-    if (itemExistente) {
-      setCarrito(carrito.map((item) => item._id === productoParaPesar._id ? { ...item, cantidad: item.cantidad + kilos } : item));
-    } else {
-      setCarrito([...carrito, { ...productoParaPesar, cantidad: kilos }]);
-    }
+    // Monto final: si el cajero lo editó a mano, se usa ese monto exacto
+    const montoCalculado = Math.round(kilos * productoParaPesar.precioVenta);
+    const montoFinal = precioCobrar !== '' && !isNaN(Number(precioCobrar))
+      ? Number(precioCobrar)
+      : montoCalculado;
+
+    // Calculamos el precio unitario efectivo proporcional
+    const precioVentaEfectivo = kilos > 0 ? (montoFinal / kilos) : productoParaPesar.precioVenta;
+
+    const nuevoItem = {
+      ...productoParaPesar,
+      cartId: Date.now() + Math.random(), // ID único para permitir varias porciones del mismo queso
+      cantidad: kilos,
+      precioVenta: precioVentaEfectivo,
+      subtotal: montoFinal,
+      precioOriginalPorKg: productoParaPesar.precioVenta
+    };
+
+    setCarrito([...carrito, nuevoItem]);
     setProductoParaPesar(null);
     setPesoGramos('');
+    setPrecioCobrar('');
     setBusqueda('');
   };
 
-  // Permite cerrar el modal de peso con tecla Escape
   const manejarKeyDownPeso = (e) => {
     if (e.key === 'Escape') {
       setProductoParaPesar(null);
       setPesoGramos('');
+      setPrecioCobrar('');
     }
   };
 
+  // --- LÓGICA DE EDICIÓN ---
+  const abrirEdicion = (e, producto) => {
+    e.stopPropagation();
+    setProductoAEditar(producto);
+    setNombreEdit(producto.nombre);
+    setPrecioCostoEdit(producto.precioCosto);
+    setPrecioVentaEdit(producto.precioVenta);
+  };
+
+  const guardarEdicionBD = async (e) => {
+    e.preventDefault();
+    if (!productoAEditar) return;
+    setGuardandoEdit(true);
+
+    try {
+      const { error } = await supabase
+        .from('productos')
+        .update({
+          nombre: nombreEdit.trim(),
+          precioCosto: Number(precioCostoEdit),
+          precioVenta: Number(precioVentaEdit)
+        })
+        .eq('_id', productoAEditar._id);
+
+      if (!error) {
+        setProductos(productos.map((p) => 
+          p._id === productoAEditar._id 
+            ? { ...p, nombre: nombreEdit.trim(), precioCosto: Number(precioCostoEdit), precioVenta: Number(precioVentaEdit) } 
+            : p
+        ));
+        mostrarNotificacion('¡Producto actualizado con éxito!', 'exito');
+        setProductoAEditar(null);
+      } else {
+        mostrarNotificacion('Error al actualizar el producto', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      mostrarNotificacion('Error de conexión', 'error');
+    } finally {
+      setGuardandoEdit(false);
+    }
+  };
+
+  // --- LÓGICA DE ELIMINACIÓN ---
   const confirmarEliminacion = (e, producto) => {
     e.stopPropagation(); 
     setProductoAEliminar(producto);
@@ -154,11 +243,12 @@ function CajaPOS({ sucursal }) {
     }
   };
 
-  const eliminarDelCarrito = (idProducto) => {
-    setCarrito(carrito.filter((item) => item._id !== idProducto));
+  const eliminarDelCarrito = (itemCartId) => {
+    setCarrito(carrito.filter((item) => (item.cartId || item._id) !== itemCartId));
   };
 
-  const totalVenta = carrito.reduce((suma, item) => suma + (item.precioVenta * item.cantidad), 0);
+  // Totales de la venta considerando los subtotales exactos (incluyendo redondeos)
+  const totalVenta = carrito.reduce((suma, item) => suma + (item.subtotal !== undefined ? item.subtotal : (item.precioVenta * item.cantidad)), 0);
   const totalCosto = carrito.reduce((suma, item) => suma + (item.precioCosto * item.cantidad), 0);
 
   const productosFiltrados = productos.filter(producto => 
@@ -173,15 +263,15 @@ function CajaPOS({ sucursal }) {
         productoId: item._id,
         nombre: item.nombre,
         cantidad: item.cantidad, 
-        precioVenta: item.precioVenta,
+        precioVenta: item.subtotal !== undefined ? Math.round(item.subtotal) : item.precioVenta,
         precioCosto: item.precioCosto
       }));
 
       const datosVenta = {
         sucursal: sucursal,
         productos: productosVenta,
-        totalVenta: totalVenta,
-        totalCosto: totalCosto,
+        totalVenta: Math.round(totalVenta),
+        totalCosto: Math.round(totalCosto),
         metodoPago: metodoPago
       };
 
@@ -213,6 +303,75 @@ function CajaPOS({ sucursal }) {
         </div>
       )}
 
+      {/* --- MODAL PARA EDITAR PRODUCTO --- */}
+      {productoAEditar && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-[#FFF0C2]">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
+              <h3 className="text-xl font-bold text-[#8B5A2B]">Editar Producto</h3>
+              <span className="bg-[#FFF0C2] text-[#8B5A2B] font-black px-2.5 py-1 rounded-md text-sm border border-[#FFB800]">
+                #{productoAEditar.codigo}
+              </span>
+            </div>
+
+            <form onSubmit={guardarEdicionBD} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Nombre del Producto</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={nombreEdit} 
+                  onChange={(e) => setNombreEdit(e.target.value)} 
+                  className="w-full bg-gray-50 border-2 border-gray-200 focus:border-[#FFB800] focus:bg-white focus:outline-none rounded-xl px-3 py-2.5 font-bold text-gray-800"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Costo (₡)</label>
+                  <input 
+                    type="number" 
+                    required 
+                    value={precioCostoEdit} 
+                    onChange={(e) => setPrecioCostoEdit(e.target.value)} 
+                    className="w-full bg-gray-50 border-2 border-gray-200 focus:border-[#8B5A2B] focus:bg-white focus:outline-none rounded-xl px-3 py-2.5 font-bold text-gray-800"
+                  />
+                  <span className="text-[11px] text-gray-400">Por {productoAEditar.tipoVenta === 'Peso' ? 'Kilo' : 'Unidad'}</span>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Venta (₡)</label>
+                  <input 
+                    type="number" 
+                    required 
+                    value={precioVentaEdit} 
+                    onChange={(e) => setPrecioVentaEdit(e.target.value)} 
+                    className="w-full bg-gray-50 border-2 border-gray-200 focus:border-[#2E7D32] focus:bg-white focus:outline-none rounded-xl px-3 py-2.5 font-bold text-[#2E7D32]"
+                  />
+                  <span className="text-[11px] text-gray-400">Por {productoAEditar.tipoVenta === 'Peso' ? 'Kilo' : 'Unidad'}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-100">
+                <button 
+                  type="button" 
+                  onClick={() => setProductoAEditar(null)} 
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={guardandoEdit}
+                  className={`flex-1 bg-[#8B5A2B] hover:bg-[#4A2511] text-white font-bold py-3 rounded-xl transition-colors shadow-md cursor-pointer ${guardandoEdit ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  {guardandoEdit ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* --- MODAL PARA CONFIRMAR ELIMINACIÓN --- */}
       {productoAEliminar && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -238,45 +397,79 @@ function CajaPOS({ sucursal }) {
         </div>
       )}
 
-      {/* --- MODAL DE PESO --- */}
+      {/* --- MODAL DE PESO CON REDONDEO Y MONTO EDITABLE --- */}
       {productoParaPesar && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" onKeyDown={manejarKeyDownPeso}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-[#FFF0C2]">
-            <h3 className="text-xl font-bold text-[#8B5A2B] mb-1">Ingresar Peso</h3>
-            <p className="text-gray-600 mb-4 font-medium text-lg">{productoParaPesar.nombre}</p>
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="text-xl font-bold text-[#8B5A2B]">Ingresar Peso</h3>
+              <span className="text-xs font-bold text-gray-500">₡{productoParaPesar.precioVenta.toLocaleString()}/kg</span>
+            </div>
+            <p className="text-gray-700 mb-4 font-bold text-lg">{productoParaPesar.nombre}</p>
             
             <form onSubmit={confirmarPeso}>
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Tamaños frecuentes:</label>
+              {/* Botones de peso frecuente */}
+              <div className="mb-3">
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">Tamaños frecuentes:</label>
                 <div className="grid grid-cols-3 gap-2">
-                  <button type="button" onClick={() => setPesoGramos('250')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm cursor-pointer">250g</button>
-                  <button type="button" onClick={() => setPesoGramos('500')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm cursor-pointer">500g</button>
-                  <button type="button" onClick={() => setPesoGramos('1000')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-2 rounded-lg transition-colors text-sm cursor-pointer">1 Kg</button>
+                  <button type="button" onClick={() => manejarCambioGramos('250')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-1.5 rounded-lg transition-colors text-xs cursor-pointer">250g</button>
+                  <button type="button" onClick={() => manejarCambioGramos('500')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-1.5 rounded-lg transition-colors text-xs cursor-pointer">500g</button>
+                  <button type="button" onClick={() => manejarCambioGramos('1000')} className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] hover:bg-[#FFB800] hover:text-white font-bold py-1.5 rounded-lg transition-colors text-xs cursor-pointer">1 Kg</button>
                 </div>
               </div>
 
-              <label className="block text-sm font-bold text-gray-700 mb-2">Peso en gramos (Enter para agregar):</label>
-              <div className="relative mb-6">
-                <input 
-                  type="number" 
-                  ref={inputPesoRef}
-                  autoFocus 
-                  required 
-                  min="1" 
-                  value={pesoGramos} 
-                  onChange={(e) => setPesoGramos(e.target.value)} 
-                  onWheel={(e) => e.currentTarget.blur()} 
-                  className="w-full bg-gray-50 border-2 border-gray-300 focus:border-[#FFB800] rounded-xl px-4 py-3 text-2xl font-black text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
-                  placeholder="Ej: 350" 
-                />
-                <span className="absolute right-4 top-4 text-gray-400 font-bold text-lg">gr</span>
+              {/* Input 1: Peso en gramos */}
+              <div className="mb-3">
+                <label className="block text-xs font-bold text-gray-700 mb-1">1. Peso en gramos:</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    ref={inputPesoRef}
+                    autoFocus 
+                    required 
+                    min="1" 
+                    value={pesoGramos} 
+                    onChange={(e) => manejarCambioGramos(e.target.value)} 
+                    onWheel={(e) => e.currentTarget.blur()} 
+                    className="w-full bg-gray-50 border-2 border-gray-300 focus:border-[#FFB800] rounded-xl px-4 py-2.5 text-xl font-black text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                    placeholder="Ej: 300" 
+                  />
+                  <span className="absolute right-4 top-3 text-gray-400 font-bold text-sm">gr</span>
+                </div>
+              </div>
+
+              {/* Input 2: Monto a cobrar editable (Redondeo) */}
+              <div className="mb-4 bg-[#FFF9E6] p-3 rounded-xl border border-[#FFE082]">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-[#8B5A2B]">2. Monto a cobrar (Editable):</label>
+                  <div className="flex gap-1">
+                   
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-[#2E7D32] font-black text-lg">₡</span>
+                  <input 
+                    type="number" 
+                    required 
+                    min="1" 
+                    value={precioCobrar} 
+                    onChange={(e) => setPrecioCobrar(e.target.value)} 
+                    onWheel={(e) => e.currentTarget.blur()} 
+                    className="w-full bg-white border-2 border-[#2E7D32] rounded-xl pl-8 pr-4 py-2 text-2xl font-black text-center text-[#2E7D32] focus:outline-none shadow-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                    placeholder="0" 
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1 text-center font-medium">
+                  Puedes cambiar el monto manualmente para redondearlo a números exactos.
+                </p>
               </div>
               
               <div className="flex gap-3">
-                <button type="button" onClick={() => { setProductoParaPesar(null); setPesoGramos(''); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer text-sm">
+                <button type="button" onClick={() => { setProductoParaPesar(null); setPesoGramos(''); setPrecioCobrar(''); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer text-sm">
                   Cancelar (Esc)
                 </button>
-                <button type="submit" className="flex-1 bg-[#2E7D32] hover:bg-green-800 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer shadow-md">
+                <button type="submit" className="flex-1 bg-[#2E7D32] hover:bg-green-800 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer shadow-md text-base">
                   Agregar ↵
                 </button>
               </div>
@@ -315,13 +508,25 @@ function CajaPOS({ sucursal }) {
                   <span className="font-bold text-gray-700 text-left text-sm sm:text-lg">{producto.nombre}</span>
                 </div>
                 
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <span onClick={() => manejarClickProducto(producto)} className="text-[#2E7D32] font-black text-lg sm:text-xl cursor-pointer">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span onClick={() => manejarClickProducto(producto)} className="text-[#2E7D32] font-black text-lg sm:text-xl cursor-pointer mr-1">
                     ₡{producto.precioVenta.toLocaleString()} <span className="text-sm font-medium text-gray-500">
                       {producto.tipoVenta === 'Unidad' ? '/ und' : '/ kg'}
                     </span>
                   </span>
                   
+                  {/* BOTÓN LÁPIZ (EDITAR) */}
+                  <button 
+                    onClick={(e) => abrirEdicion(e, producto)}
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors cursor-pointer"
+                    title="Editar producto"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+
+                  {/* BOTÓN BASURERO (ELIMINAR) */}
                   <button 
                     onClick={(e) => confirmarEliminacion(e, producto)}
                     className="w-9 h-9 flex items-center justify-center rounded-full bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors cursor-pointer"
@@ -348,19 +553,21 @@ function CajaPOS({ sucursal }) {
           ) : (
             <ul className="space-y-2">
               {carrito.map((item) => (
-                <li key={item._id} className="flex justify-between items-center bg-white p-2 rounded border border-gray-100 shadow-sm">
+                <li key={item.cartId || item._id} className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm">
                   <div className="flex flex-col">
                     <span className="font-bold text-gray-700 text-sm">{item.nombre}</span>
                     <span className="text-gray-500 text-xs">
                       {item.tipoVenta === 'Unidad' 
                         ? `${item.cantidad} und x ₡${item.precioVenta.toLocaleString()}` 
-                        : `${item.cantidad.toFixed(3)} kg x ₡${item.precioVenta.toLocaleString()}`
+                        : `${item.cantidad.toFixed(3)} kg (Precio ajustado: ₡${Math.round(item.subtotal).toLocaleString()})`
                       }
                     </span>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <span className="font-black text-[#4A2511]">₡{Math.round(item.precioVenta * item.cantidad).toLocaleString()}</span>
-                    <button onClick={() => eliminarDelCarrito(item._id)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors cursor-pointer" title="Quitar del carrito">
+                    <span className="font-black text-[#4A2511] text-base">
+                      ₡{Math.round(item.subtotal !== undefined ? item.subtotal : (item.precioVenta * item.cantidad)).toLocaleString()}
+                    </span>
+                    <button onClick={() => eliminarDelCarrito(item.cartId || item._id)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors cursor-pointer" title="Quitar del carrito">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                   </div>

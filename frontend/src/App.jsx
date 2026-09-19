@@ -6,6 +6,7 @@ import GestionUsuarios from './components/GestionUsuarios';
 import CajaPOS from './components/CajaPOS';
 import AgregarProducto from './components/AgregarProducto';
 import ReporteFinanzas from './components/ReporteFinanzas';
+import ReporteKilos from './components/ReporteKilos'; // 👈 1. NUEVO COMPONENTE
 
 function App() {
   const [usuarioLogueado, setUsuarioLogueado] = useState(null);
@@ -123,7 +124,7 @@ function App() {
           </div>
         </div>
 
-        {/* FOOTER MARCA DE AGUA (PANTALLA SUCURSAL) */}
+        {/* FOOTER MARCA DE AGUA */}
         <footer className="py-4 text-center text-white/60 text-xs sm:text-sm">
           Desarrollado por{' '}
           <a 
@@ -161,6 +162,7 @@ function App() {
           </div>
         </header>
 
+        {/* BARRA DE BOTONES DE NAVEGACIÓN */}
         <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex gap-4 overflow-x-auto">
           {tienePermiso('pos') && (
             <button onClick={() => setVistaActiva('pos')} className={`px-6 py-2 rounded-lg font-bold transition-colors cursor-pointer flex-shrink-0 ${vistaActiva === 'pos' ? 'bg-[#FFB800] text-[#4A2511]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
@@ -177,16 +179,25 @@ function App() {
               Finanzas del Día
             </button>
           )}
+
+          {/* 👈 2. NUEVO BOTÓN: KILOS VENDIDOS */}
+          {tienePermiso('finanzas') && (
+            <button onClick={() => setVistaActiva('kilos')} className={`px-6 py-2 rounded-lg font-bold transition-colors cursor-pointer flex-shrink-0 ${vistaActiva === 'kilos' ? 'bg-[#FFB800] text-[#4A2511]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              Kilos Vendidos 
+            </button>
+          )}
         </div>
 
         <main className="flex-1 p-4 overflow-hidden">
           {vistaActiva === 'pos' && tienePermiso('pos') && <CajaPOS sucursal={sucursal} />}
           {vistaActiva === 'agregar' && tienePermiso('agregar') && <AgregarProducto sucursal={sucursal} />}
           {vistaActiva === 'finanzas' && tienePermiso('finanzas') && <ReporteFinanzas sucursal={sucursal} />}
+          {/* 👈 3. RENDERIZAR LA VISTA DE KILOS */}
+          {vistaActiva === 'kilos' && tienePermiso('finanzas') && <ReporteKilos sucursal={sucursal} />}
         </main>
       </div>
 
-      {/* FOOTER MARCA DE AGUA (SISTEMA PRINCIPAL) */}
+      {/* FOOTER MARCA DE AGUA */}
       <footer className="py-2.5 text-center text-gray-500 text-xs border-t border-gray-200 bg-white mt-auto">
         Desarrollado por{' '}
         <a 
