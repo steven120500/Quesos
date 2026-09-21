@@ -489,22 +489,7 @@ function CajaPOS({ sucursal }) {
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-xs font-bold text-[#8B5A2B]">2. Monto a cobrar (Editable):</label>
                   <div className="flex gap-1">
-                    <button 
-                      type="button" 
-                      onClick={() => redondearPrecio(50)} 
-                      disabled={!precioCobrar}
-                      className="text-[10px] font-black bg-white hover:bg-[#FFB800] text-[#8B5A2B] hover:text-white px-2 py-0.5 rounded border border-[#FFB800] transition-colors cursor-pointer disabled:opacity-40"
-                    >
-                      Redondear 50
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => redondearPrecio(100)} 
-                      disabled={!precioCobrar}
-                      className="text-[10px] font-black bg-white hover:bg-[#FFB800] text-[#8B5A2B] hover:text-white px-2 py-0.5 rounded border border-[#FFB800] transition-colors cursor-pointer disabled:opacity-40"
-                    >
-                      Redondear 100
-                    </button>
+                  
                   </div>
                 </div>
 
