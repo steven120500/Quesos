@@ -6,12 +6,12 @@ function AgregarProducto({ sucursal }) {
   const [precioCosto, setPrecioCosto] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
   const [tipoVenta, setTipoVenta] = useState('Peso');
+  const [stock, setStock] = useState(''); // 👈 NUEVO: Stock para productos por unidad
   
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' }); 
   const [cargando, setCargando] = useState(false); 
   const [codigoEstimado, setCodigoEstimado] = useState('...');
 
-  // Solo para mostrar una vista previa aproximada en pantalla
   const refrescarCodigoPreview = async () => {
     try {
       const { data } = await supabase.from('productos').select('codigo');
@@ -36,11 +36,9 @@ function AgregarProducto({ sucursal }) {
       let intentos = 0;
       let codigoAsignado = '';
 
-      // Bucle de asignación segura: busca el número más alto en ese instante y guarda
       while (!guardado && intentos < 3) {
         intentos++;
 
-        // 1. Busca en tiempo real el último número en la base de datos
         const { data: productosActuales } = await supabase
           .from('productos')
           .select('codigo');
@@ -52,7 +50,6 @@ function AgregarProducto({ sucursal }) {
         const siguienteNumero = numeros.length > 0 ? Math.max(...numeros) + 1 : 1;
         codigoAsignado = String(siguienteNumero).padStart(3, '0');
 
-        // 2. Intenta guardar con el número disponible
         const { error } = await supabase
           .from('productos')
           .insert([{
@@ -61,10 +58,10 @@ function AgregarProducto({ sucursal }) {
             precioCosto: Number(precioCosto),
             precioVenta: Number(precioVenta),
             sucursal: 'General',
-            tipoVenta: tipoVenta
+            tipoVenta: tipoVenta,
+            stock: tipoVenta === 'Unidad' ? (parseInt(stock, 10) || 0) : 0 // 👈 Guarda el stock solo si es Unidad
           }]);
 
-        // Si no dio error de duplicado, se guardó con éxito
         if (!error) {
           guardado = true;
         }
@@ -79,6 +76,7 @@ function AgregarProducto({ sucursal }) {
         setPrecioCosto('');
         setPrecioVenta('');
         setTipoVenta('Peso');
+        setStock('');
         refrescarCodigoPreview();
       } else {
         setMensaje({ texto: 'Error al registrar el producto. Inténtalo de nuevo.', tipo: 'error' });
@@ -98,7 +96,7 @@ function AgregarProducto({ sucursal }) {
         <div>
           <h2 className="text-[#8B5A2B] text-2xl font-bold">Crear Nuevo Producto</h2>
           <p className="text-gray-500 font-medium">
-            Catálogo: <span className="text-[#2E7D32] font-bold">Compartido (Sarchí y Poás)</span>
+            Catálogo: <span className="text-[#2E7D32] font-bold">Compartido (Sarchí y Mercado)</span>
           </p>
         </div>
       </div>
@@ -175,6 +173,25 @@ function AgregarProducto({ sucursal }) {
             <p className="text-sm text-gray-500 mt-2 font-medium">Precio final por {tipoVenta === 'Peso' ? '1 Kilo' : '1 Unidad'}.</p>
           </div>
         </div>
+
+        {/* 👈 NUEVO: Campo de Stock que solo aparece cuando se vende por Unidad */}
+        {tipoVenta === 'Unidad' && (
+          <div className="bg-[#FFF9E6] p-4 rounded-xl border border-[#FFE082] animate-fadeIn">
+            <label className="block text-[#8B5A2B] font-bold mb-1 text-base">Cantidad en Inventario (Unidades iniciales)</label>
+            <input 
+              type="number" 
+              required 
+              min="0"
+              value={stock} 
+              onChange={(e) => setStock(e.target.value)} 
+              className="w-full bg-white border-2 border-[#FFB800] focus:outline-none rounded-xl px-4 py-3 text-lg font-black text-gray-800 shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+              placeholder="Ej. 24" 
+            />
+            <p className="text-xs text-gray-500 mt-1.5 font-medium">
+              Este número se irá descontando automáticamente en caja cada vez que se venda una unidad.
+            </p>
+          </div>
+        )}
 
         <div className="pt-6 mt-6 border-t border-gray-100">
           <button 

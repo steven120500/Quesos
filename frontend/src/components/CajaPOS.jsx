@@ -23,6 +23,7 @@ function CajaPOS({ sucursal }) {
   const [nombreEdit, setNombreEdit] = useState('');
   const [precioCostoEdit, setPrecioCostoEdit] = useState('');
   const [precioVentaEdit, setPrecioVentaEdit] = useState('');
+  const [stockEdit, setStockEdit] = useState(''); // 👈 Stock editable en el lápiz
   const [guardandoEdit, setGuardandoEdit] = useState(false);
 
   // Referencias para foco
@@ -78,6 +79,13 @@ function CajaPOS({ sucursal }) {
   const manejarClickProducto = (producto) => {
     if (producto.tipoVenta === 'Unidad') {
       const itemExistente = carrito.find((item) => item._id === producto._id);
+      const cantidadEnCarrito = itemExistente ? itemExistente.cantidad : 0;
+
+      // Validación opcional si el stock llega a 0
+      if ((producto.stock || 0) <= cantidadEnCarrito) {
+        mostrarNotificacion(`¡Aviso: No queda más stock de ${producto.nombre}!`, 'error');
+      }
+
       if (itemExistente) {
         setCarrito(carrito.map((item) => item._id === producto._id ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precioVenta } : item));
       } else {
@@ -92,7 +100,6 @@ function CajaPOS({ sucursal }) {
     }
   };
 
-  // Al escribir los gramos, calcula automáticamente el precio sugerido
   const manejarCambioGramos = (valor) => {
     setPesoGramos(valor);
     const gr = parseFloat(valor);
@@ -104,7 +111,6 @@ function CajaPOS({ sucursal }) {
     }
   };
 
-  // Botón para redondear al múltiplo de 50 o 100 más cercano
   const redondearPrecio = (multiplo) => {
     const actual = Number(precioCobrar);
     if (!isNaN(actual) && actual > 0) {
@@ -113,7 +119,6 @@ function CajaPOS({ sucursal }) {
     }
   };
 
-  // ATAJO DE TECLADO EN EL BUSCADOR (ENTER)
   const manejarKeyDownBusqueda = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -140,18 +145,16 @@ function CajaPOS({ sucursal }) {
     const kilos = parseFloat(pesoGramos) / 1000;
     if (isNaN(kilos) || kilos <= 0) return;
 
-    // Monto final: si el cajero lo editó a mano, se usa ese monto exacto
     const montoCalculado = Math.round(kilos * productoParaPesar.precioVenta);
     const montoFinal = precioCobrar !== '' && !isNaN(Number(precioCobrar))
       ? Number(precioCobrar)
       : montoCalculado;
 
-    // Calculamos el precio unitario efectivo proporcional
     const precioVentaEfectivo = kilos > 0 ? (montoFinal / kilos) : productoParaPesar.precioVenta;
 
     const nuevoItem = {
       ...productoParaPesar,
-      cartId: Date.now() + Math.random(), // ID único para permitir varias porciones del mismo queso
+      cartId: Date.now() + Math.random(),
       cantidad: kilos,
       precioVenta: precioVentaEfectivo,
       subtotal: montoFinal,
@@ -180,6 +183,7 @@ function CajaPOS({ sucursal }) {
     setNombreEdit(producto.nombre);
     setPrecioCostoEdit(producto.precioCosto);
     setPrecioVentaEdit(producto.precioVenta);
+    setStockEdit(producto.stock !== undefined ? producto.stock : 0);
   };
 
   const guardarEdicionBD = async (e) => {
@@ -188,19 +192,25 @@ function CajaPOS({ sucursal }) {
     setGuardandoEdit(true);
 
     try {
+      const camposActualizar = {
+        nombre: nombreEdit.trim(),
+        precioCosto: Number(precioCostoEdit),
+        precioVenta: Number(precioVentaEdit)
+      };
+
+      if (productoAEditar.tipoVenta === 'Unidad') {
+        camposActualizar.stock = parseInt(stockEdit, 10) || 0;
+      }
+
       const { error } = await supabase
         .from('productos')
-        .update({
-          nombre: nombreEdit.trim(),
-          precioCosto: Number(precioCostoEdit),
-          precioVenta: Number(precioVentaEdit)
-        })
+        .update(camposActualizar)
         .eq('_id', productoAEditar._id);
 
       if (!error) {
         setProductos(productos.map((p) => 
           p._id === productoAEditar._id 
-            ? { ...p, nombre: nombreEdit.trim(), precioCosto: Number(precioCostoEdit), precioVenta: Number(precioVentaEdit) } 
+            ? { ...p, ...camposActualizar } 
             : p
         ));
         mostrarNotificacion('¡Producto actualizado con éxito!', 'exito');
@@ -247,7 +257,6 @@ function CajaPOS({ sucursal }) {
     setCarrito(carrito.filter((item) => (item.cartId || item._id) !== itemCartId));
   };
 
-  // Totales de la venta considerando los subtotales exactos (incluyendo redondeos)
   const totalVenta = carrito.reduce((suma, item) => suma + (item.subtotal !== undefined ? item.subtotal : (item.precioVenta * item.cantidad)), 0);
   const totalCosto = carrito.reduce((suma, item) => suma + (item.precioCosto * item.cantidad), 0);
 
@@ -256,6 +265,7 @@ function CajaPOS({ sucursal }) {
     producto.codigo.includes(busqueda)
   );
 
+  // --- PROCESAR VENTA Y DESCONTAR STOCK ---
   const procesarVenta = async () => {
     setProcesando(true);
     try {
@@ -275,12 +285,36 @@ function CajaPOS({ sucursal }) {
         metodoPago: metodoPago
       };
 
-      const { error } = await supabase
+      // 1. Guardar la venta en Supabase
+      const { error: errorVenta } = await supabase
         .from('ventas')
         .insert([datosVenta]);
 
-      if (!error) {
-        mostrarNotificacion('¡Venta registrada con éxito!', 'exito');
+      if (!errorVenta) {
+        // 2. Descontar el stock en la base de datos de los productos que sean por unidad
+        for (const item of carrito) {
+          if (item.tipoVenta === 'Unidad') {
+            await supabase.rpc('descontar_stock', {
+              p_producto_id: item._id,
+              p_cantidad: item.cantidad
+            });
+          }
+        }
+
+        // 3. Actualizar el stock en la pantalla al instante
+        setProductos((prev) =>
+          prev.map((p) => {
+            if (p.tipoVenta === 'Unidad') {
+              const itemVendido = carrito.find((c) => c._id === p._id);
+              if (itemVendido) {
+                return { ...p, stock: Math.max(0, (p.stock || 0) - itemVendido.cantidad) };
+              }
+            }
+            return p;
+          })
+        );
+
+        mostrarNotificacion('¡Venta registrada e inventario actualizado!', 'exito');
         setCarrito([]); 
         setMetodoPago('Efectivo'); 
         if (inputBusquedaRef.current) inputBusquedaRef.current.focus();
@@ -303,7 +337,7 @@ function CajaPOS({ sucursal }) {
         </div>
       )}
 
-      {/* --- MODAL PARA EDITAR PRODUCTO --- */}
+      {/* --- MODAL PARA EDITAR PRODUCTO (LÁPIZ) --- */}
       {productoAEditar && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border-2 border-[#FFF0C2]">
@@ -351,6 +385,21 @@ function CajaPOS({ sucursal }) {
                 </div>
               </div>
 
+              {/* Si es unidad, permite editar o reabastecer el stock */}
+              {productoAEditar.tipoVenta === 'Unidad' && (
+                <div className="bg-[#FFF9E6] p-3 rounded-xl border border-[#FFE082]">
+                  <label className="block text-sm font-bold text-[#8B5A2B] mb-1">Stock disponible (Unidades)</label>
+                  <input 
+                    type="number" 
+                    required 
+                    min="0"
+                    value={stockEdit} 
+                    onChange={(e) => setStockEdit(e.target.value)} 
+                    className="w-full bg-white border-2 border-[#FFB800] focus:outline-none rounded-xl px-3 py-2 font-black text-gray-800"
+                  />
+                </div>
+              )}
+
               <div className="flex gap-3 pt-4 border-t border-gray-100">
                 <button 
                   type="button" 
@@ -397,7 +446,7 @@ function CajaPOS({ sucursal }) {
         </div>
       )}
 
-      {/* --- MODAL DE PESO CON REDONDEO Y MONTO EDITABLE --- */}
+      {/* --- MODAL DE PESO (CON REDONDEO) --- */}
       {productoParaPesar && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" onKeyDown={manejarKeyDownPeso}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-[#FFF0C2]">
@@ -408,7 +457,6 @@ function CajaPOS({ sucursal }) {
             <p className="text-gray-700 mb-4 font-bold text-lg">{productoParaPesar.nombre}</p>
             
             <form onSubmit={confirmarPeso}>
-              {/* Botones de peso frecuente */}
               <div className="mb-3">
                 <label className="block text-xs font-bold text-gray-500 mb-1.5">Tamaños frecuentes:</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -418,7 +466,6 @@ function CajaPOS({ sucursal }) {
                 </div>
               </div>
 
-              {/* Input 1: Peso en gramos */}
               <div className="mb-3">
                 <label className="block text-xs font-bold text-gray-700 mb-1">1. Peso en gramos:</label>
                 <div className="relative">
@@ -438,12 +485,26 @@ function CajaPOS({ sucursal }) {
                 </div>
               </div>
 
-              {/* Input 2: Monto a cobrar editable (Redondeo) */}
               <div className="mb-4 bg-[#FFF9E6] p-3 rounded-xl border border-[#FFE082]">
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-xs font-bold text-[#8B5A2B]">2. Monto a cobrar (Editable):</label>
                   <div className="flex gap-1">
-                   
+                    <button 
+                      type="button" 
+                      onClick={() => redondearPrecio(50)} 
+                      disabled={!precioCobrar}
+                      className="text-[10px] font-black bg-white hover:bg-[#FFB800] text-[#8B5A2B] hover:text-white px-2 py-0.5 rounded border border-[#FFB800] transition-colors cursor-pointer disabled:opacity-40"
+                    >
+                      Redondear 50
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => redondearPrecio(100)} 
+                      disabled={!precioCobrar}
+                      className="text-[10px] font-black bg-white hover:bg-[#FFB800] text-[#8B5A2B] hover:text-white px-2 py-0.5 rounded border border-[#FFB800] transition-colors cursor-pointer disabled:opacity-40"
+                    >
+                      Redondear 100
+                    </button>
                   </div>
                 </div>
 
@@ -461,7 +522,7 @@ function CajaPOS({ sucursal }) {
                   />
                 </div>
                 <p className="text-[10px] text-gray-500 mt-1 text-center font-medium">
-                  Puedes cambiar el monto manualmente para redondearlo a números exactos.
+                  Monto final para cobrar cifras exactas.
                 </p>
               </div>
               
@@ -505,7 +566,15 @@ function CajaPOS({ sucursal }) {
                   <span className="bg-[#FFF0C2] text-[#8B5A2B] border border-[#FFB800] text-xs sm:text-sm font-black px-2.5 py-1 rounded-md min-w-[45px] text-center">
                     #{producto.codigo}
                   </span>
-                  <span className="font-bold text-gray-700 text-left text-sm sm:text-lg">{producto.nombre}</span>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-gray-700 text-left text-sm sm:text-lg">{producto.nombre}</span>
+                    {/* Badge de Stock en productos por unidad */}
+                    {producto.tipoVenta === 'Unidad' && (
+                      <span className={`text-[11px] font-bold text-left ${producto.stock > 0 ? 'text-[#2E7D32]' : 'text-red-500 animate-pulse'}`}>
+                        {producto.stock > 0 ? `Stock: ${producto.stock} und` : 'Agotado (0 und)'}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -519,7 +588,7 @@ function CajaPOS({ sucursal }) {
                   <button 
                     onClick={(e) => abrirEdicion(e, producto)}
                     className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors cursor-pointer"
-                    title="Editar producto"
+                    title="Editar producto o reabastecer stock"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -559,7 +628,7 @@ function CajaPOS({ sucursal }) {
                     <span className="text-gray-500 text-xs">
                       {item.tipoVenta === 'Unidad' 
                         ? `${item.cantidad} und x ₡${item.precioVenta.toLocaleString()}` 
-                        : `${item.cantidad.toFixed(3)} kg (Precio ajustado: ₡${Math.round(item.subtotal).toLocaleString()})`
+                        : `${item.cantidad.toFixed(3)} kg (Cobrado: ₡${Math.round(item.subtotal).toLocaleString()})`
                       }
                     </span>
                   </div>

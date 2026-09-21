@@ -63,6 +63,7 @@ function ReporteFinanzas({ sucursal }) {
     }
   };
 
+  // Filtro de ventas por día o por mes
   const ventasFiltradas = ventasBD.filter(venta => {
     const fechaVenta = new Date(venta.createdAt);
     
@@ -78,181 +79,176 @@ function ReporteFinanzas({ sucursal }) {
     }
   });
 
+  // --- CÁLCULOS FINANCIEROS Y DESGLOSE DE MÉTODOS DE PAGO ---
+  const totalEfectivo = ventasFiltradas.filter(v => v.metodoPago === 'Efectivo').reduce((sum, v) => sum + v.totalVenta, 0);
+  const totalSinpe = ventasFiltradas.filter(v => v.metodoPago === 'SINPE').reduce((sum, v) => sum + v.totalVenta, 0);
+  const totalDatafono = ventasFiltradas.filter(v => v.metodoPago === 'Datáfono').reduce((sum, v) => sum + v.totalVenta, 0);
+
   const ventasTotales = ventasFiltradas.reduce((suma, v) => suma + v.totalVenta, 0);
   const costosTotales = ventasFiltradas.reduce((suma, v) => suma + v.totalCosto, 0);
   const gananciaNeta = ventasTotales - costosTotales;
   const cantidadVentas = ventasFiltradas.length;
 
- // --- GENERADOR DE PDF PROFESIONAL CON CUADROS ALINEADOS ---
- const generarPDF = () => {
-  const doc = new jsPDF();
-  const titulo = tipoFiltro === 'dia' ? `Cierre de Caja Diario - ${fechaFiltro}` : `Reporte Financiero Mensual - ${mesFiltro}`;
-  const fechaImpresion = new Date().toLocaleString();
+  // --- GENERADOR DE PDF ---
+  const generarPDF = () => {
+    const doc = new jsPDF();
+    const titulo = tipoFiltro === 'dia' ? `Cierre de Caja Diario - ${fechaFiltro}` : `Reporte Financiero Mensual - ${mesFiltro}`;
+    const fechaImpresion = new Date().toLocaleString();
 
-  const totalEfectivo = ventasFiltradas.filter(v => v.metodoPago === 'Efectivo').reduce((sum, v) => sum + v.totalVenta, 0);
-  const totalSinpe = ventasFiltradas.filter(v => v.metodoPago === 'SINPE').reduce((sum, v) => sum + v.totalVenta, 0);
-  const totalDatafono = ventasFiltradas.filter(v => v.metodoPago === 'Datáfono').reduce((sum, v) => sum + v.totalVenta, 0);
+    // ENCABEZADO
+    doc.setFontSize(20);
+    doc.setTextColor(74, 37, 17);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Quesos - Sucursal ${sucursal}`, 14, 18);
 
-  // ENCABEZADO
-  doc.setFontSize(20);
-  doc.setTextColor(74, 37, 17); // #4A2511
-  doc.setFont("helvetica", "bold");
-  doc.text(`Quesos - Sucursal ${sucursal}`, 14, 18);
+    doc.setFontSize(14);
+    doc.setTextColor(139, 90, 43);
+    doc.setFont("helvetica", "normal");
+    doc.text(titulo, 14, 26);
 
-  doc.setFontSize(14);
-  doc.setTextColor(139, 90, 43); // #8B5A2B
-  doc.setFont("helvetica", "normal");
-  doc.text(titulo, 14, 26);
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Emitido: ${fechaImpresion}   |   Comprobantes emitidos: ${cantidadVentas}`, 14, 33);
 
-  doc.setFontSize(9);
-  doc.setTextColor(120, 120, 120);
-  doc.text(`Emitido: ${fechaImpresion}   |   Comprobantes emitidos: ${cantidadVentas}`, 14, 33);
+    // LÍNEA DIVISORIA
+    doc.setDrawColor(225, 225, 225);
+    doc.line(14, 37, 196, 37);
 
-  // LÍNEA DIVISORIA
-  doc.setDrawColor(225, 225, 225);
-  doc.line(14, 37, 196, 37);
+    // FILA 1: DESGLOSE DE PAGOS (3 CUADROS)
+    const yFila1 = 41;
+    const altoCaja1 = 25;
+    const anchoCaja = 57;
 
-  // ==========================================
-  // FILA 1: DESGLOSE DE PAGOS (3 CUADROS)
-  // ==========================================
-  const yFila1 = 41;
-  const altoCaja1 = 25;
-  const anchoCaja = 57;
+    // Cuadro 1: Efectivo
+    doc.setDrawColor(180, 220, 195);
+    doc.setFillColor(244, 251, 247);
+    doc.roundedRect(14, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
+    doc.setFontSize(8.5);
+    doc.setTextColor(46, 125, 50);
+    doc.setFont("helvetica", "bold");
+    doc.text("VENTAS EFECTIVO", 18, yFila1 + 7);
+    doc.setFontSize(12.5);
+    doc.setTextColor(30, 70, 32);
+    doc.text(`CRC ${totalEfectivo.toLocaleString()}`, 18, yFila1 + 17);
 
-  // Cuadro 1: Efectivo
-  doc.setDrawColor(180, 220, 195);
-  doc.setFillColor(244, 251, 247);
-  doc.roundedRect(14, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
-  doc.setFontSize(8.5);
-  doc.setTextColor(46, 125, 50);
-  doc.setFont("helvetica", "bold");
-  doc.text("VENTAS EFECTIVO", 18, yFila1 + 7);
-  doc.setFontSize(12.5);
-  doc.setTextColor(30, 70, 32);
-  doc.text(`CRC ${totalEfectivo.toLocaleString()}`, 18, yFila1 + 17);
+    // Cuadro 2: SINPE Móvil
+    doc.setDrawColor(210, 195, 235);
+    doc.setFillColor(248, 245, 252);
+    doc.roundedRect(76.5, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
+    doc.setFontSize(8.5);
+    doc.setTextColor(106, 27, 154);
+    doc.setFont("helvetica", "bold");
+    doc.text("VENTAS SINPE MÓVIL", 80.5, yFila1 + 7);
+    doc.setFontSize(12.5);
+    doc.setTextColor(74, 20, 140);
+    doc.text(`CRC ${totalSinpe.toLocaleString()}`, 80.5, yFila1 + 17);
 
-  // Cuadro 2: SINPE Móvil
-  doc.setDrawColor(210, 195, 235);
-  doc.setFillColor(248, 245, 252);
-  doc.roundedRect(76.5, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
-  doc.setFontSize(8.5);
-  doc.setTextColor(106, 27, 154);
-  doc.setFont("helvetica", "bold");
-  doc.text("VENTAS SINPE MÓVIL", 80.5, yFila1 + 7);
-  doc.setFontSize(12.5);
-  doc.setTextColor(74, 20, 140);
-  doc.text(`CRC ${totalSinpe.toLocaleString()}`, 80.5, yFila1 + 17);
+    // Cuadro 3: Datáfono
+    doc.setDrawColor(190, 215, 245);
+    doc.setFillColor(243, 247, 254);
+    doc.roundedRect(139, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
+    doc.setFontSize(8.5);
+    doc.setTextColor(21, 101, 192);
+    doc.setFont("helvetica", "bold");
+    doc.text("VENTAS DATÁFONO", 143, yFila1 + 7);
+    doc.setFontSize(12.5);
+    doc.setTextColor(13, 71, 161);
+    doc.text(`CRC ${totalDatafono.toLocaleString()}`, 143, yFila1 + 17);
 
-  // Cuadro 3: Datáfono / Tarjeta
-  doc.setDrawColor(190, 215, 245);
-  doc.setFillColor(243, 247, 254);
-  doc.roundedRect(139, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
-  doc.setFontSize(8.5);
-  doc.setTextColor(21, 101, 192);
-  doc.setFont("helvetica", "bold");
-  doc.text("VENTAS DATÁFONO", 143, yFila1 + 7);
-  doc.setFontSize(12.5);
-  doc.setTextColor(13, 71, 161);
-  doc.text(`CRC ${totalDatafono.toLocaleString()}`, 143, yFila1 + 17);
+    // FILA 2: BALANCE FINANCIERO (3 CUADROS)
+    const yFila2 = 70;
+    const altoCaja2 = 27;
 
-  // ==========================================
-  // FILA 2: BALANCE FINANCIERO (3 CUADROS)
-  // ==========================================
-  const yFila2 = 70;
-  const altoCaja2 = 27;
+    // Cuadro 4: Total Ingresos
+    doc.setDrawColor(255, 184, 0);
+    doc.setFillColor(255, 252, 242);
+    doc.roundedRect(14, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
+    doc.setFontSize(8.5);
+    doc.setTextColor(139, 90, 43);
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL INGRESOS", 18, yFila2 + 7);
+    doc.setFontSize(13.5);
+    doc.setTextColor(74, 37, 17);
+    doc.text(`CRC ${ventasTotales.toLocaleString()}`, 18, yFila2 + 16);
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 120, 120);
+    doc.setFont("helvetica", "normal");
+    doc.text("Suma total recaudada", 18, yFila2 + 22);
 
-  // Cuadro 4: Total Ingresos (Suma de todo)
-  doc.setDrawColor(255, 184, 0);
-  doc.setFillColor(255, 252, 242);
-  doc.roundedRect(14, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
-  doc.setFontSize(8.5);
-  doc.setTextColor(139, 90, 43);
-  doc.setFont("helvetica", "bold");
-  doc.text("TOTAL INGRESOS", 18, yFila2 + 7);
-  doc.setFontSize(13.5);
-  doc.setTextColor(74, 37, 17);
-  doc.text(`CRC ${ventasTotales.toLocaleString()}`, 18, yFila2 + 16);
-  doc.setFontSize(7.5);
-  doc.setTextColor(120, 120, 120);
-  doc.setFont("helvetica", "normal");
-  doc.text("Suma total recaudada", 18, yFila2 + 22);
+    // Cuadro 5: Total Costos
+    doc.setDrawColor(239, 154, 154);
+    doc.setFillColor(255, 245, 245);
+    doc.roundedRect(76.5, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
+    doc.setFontSize(8.5);
+    doc.setTextColor(198, 40, 40);
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL COSTOS", 80.5, yFila2 + 7);
+    doc.setFontSize(13.5);
+    doc.setTextColor(183, 28, 28);
+    doc.text(`CRC ${costosTotales.toLocaleString()}`, 80.5, yFila2 + 16);
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 120, 120);
+    doc.setFont("helvetica", "normal");
+    doc.text("Costos de productos", 80.5, yFila2 + 22);
 
-  // Cuadro 5: Total Costos de Producción
-  doc.setDrawColor(239, 154, 154);
-  doc.setFillColor(255, 245, 245);
-  doc.roundedRect(76.5, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
-  doc.setFontSize(8.5);
-  doc.setTextColor(198, 40, 40);
-  doc.setFont("helvetica", "bold");
-  doc.text("TOTAL COSTOS", 80.5, yFila2 + 7);
-  doc.setFontSize(13.5);
-  doc.setTextColor(183, 28, 28);
-  doc.text(`CRC ${costosTotales.toLocaleString()}`, 80.5, yFila2 + 16);
-  doc.setFontSize(7.5);
-  doc.setTextColor(120, 120, 120);
-  doc.setFont("helvetica", "normal");
-  doc.text("Costos de productos", 80.5, yFila2 + 22);
+    // Cuadro 6: Ganancia Neta
+    doc.setDrawColor(46, 125, 50);
+    doc.setFillColor(232, 245, 233);
+    doc.roundedRect(139, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
+    doc.setFontSize(9);
+    doc.setTextColor(27, 94, 32);
+    doc.setFont("helvetica", "bold");
+    doc.text("GANANCIA NETA", 143, yFila2 + 7);
+    doc.setFontSize(14.5);
+    doc.setTextColor(27, 94, 32);
+    doc.text(`CRC ${gananciaNeta.toLocaleString()}`, 143, yFila2 + 16);
+    doc.setFontSize(7.5);
+    doc.setTextColor(46, 125, 50);
+    doc.setFont("helvetica", "bold");
+    doc.text("Margen neto libre", 143, yFila2 + 22);
 
-  // Cuadro 6: Ganancia Neta
-  doc.setDrawColor(46, 125, 50);
-  doc.setFillColor(232, 245, 233);
-  doc.roundedRect(139, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
-  doc.setFontSize(9);
-  doc.setTextColor(27, 94, 32);
-  doc.setFont("helvetica", "bold");
-  doc.text("GANANCIA NETA", 143, yFila2 + 7);
-  doc.setFontSize(14.5);
-  doc.setTextColor(27, 94, 32);
-  doc.text(`CRC ${gananciaNeta.toLocaleString()}`, 143, yFila2 + 16);
-  doc.setFontSize(7.5);
-  doc.setTextColor(46, 125, 50);
-  doc.setFont("helvetica", "bold");
-  doc.text("Margen neto libre", 143, yFila2 + 22);
+    // TABLA DETALLADA
+    const columnasTabla = ["Nº Transacción", "Fecha y Hora", "Método", "Total Cobrado"];
+    const filasTabla = [];
 
-  // ==========================================
-  // TABLA DE TRANSACCIONES DETALLADA
-  // ==========================================
-  const columnasTabla = ["Nº Transacción", "Fecha y Hora", "Método", "Total Cobrado"];
-  const filasTabla = [];
+    ventasFiltradas.forEach(venta => {
+      const fecha = new Date(venta.createdAt);
+      filasTabla.push([
+        `TRX-${venta._id.slice(-5).toUpperCase()}`,
+        `${fecha.toLocaleDateString()} - ${fecha.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+        venta.metodoPago,
+        `CRC ${venta.totalVenta.toLocaleString()}`
+      ]);
+    });
 
-  ventasFiltradas.forEach(venta => {
-    const fecha = new Date(venta.createdAt);
-    filasTabla.push([
-      `TRX-${venta._id.slice(-5).toUpperCase()}`,
-      `${fecha.toLocaleDateString()} - ${fecha.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
-      venta.metodoPago,
-      `CRC ${venta.totalVenta.toLocaleString()}`
-    ]);
-  });
+    autoTable(doc, {
+      startY: 104,
+      head: [columnasTabla],
+      body: filasTabla,
+      theme: 'striped',
+      headStyles: { 
+        fillColor: '#4A2511', 
+        textColor: [255, 184, 0], 
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      alternateRowStyles: { fillColor: [250, 250, 251] },
+      styles: { fontSize: 9, cellPadding: 3.5 },
+      columnStyles: {
+        0: { cellWidth: 38 },
+        1: { cellWidth: 55 },
+        2: { cellWidth: 38 },
+        3: { halign: 'right', fontStyle: 'bold' }
+      },
+      didDrawPage: function () {
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text('BeeSoft POS - Sistema de Gestión Comercial | Soporte: +506 8802-8216', 14, 290);
+      }
+    });
 
-  autoTable(doc, {
-    startY: 104,
-    head: [columnasTabla],
-    body: filasTabla,
-    theme: 'striped',
-    headStyles: {
-      fillColor:  '#4A2511',
-      textColor: [255, 184, 0],
-      fontStyle: 'bold',
-      fontSize: 9
-    },
-    alternateRowStyles: { fillColor: [250, 250, 251] },
-    styles: { fontSize: 9, cellPadding: 3.5 },
-    columnStyles: {
-      0: { cellWidth: 38 },
-      1: { cellWidth: 55 },
-      2: { cellWidth: 38 },
-      3: { halign: 'right', fontStyle: 'bold' }
-    },
-    didDrawPage: function () {
-      doc.setFontSize(8);
-      doc.setTextColor(150);
-      doc.text('BeeSoft POS - Sistema de Gestion Comercial | Soporte: +506 8802-8216', 14, 290);
-    }
-  });
-
-  doc.save(`Finanzas_${tipoFiltro}_${sucursal}_${new Date().getTime()}.pdf`);
-};
+    doc.save(`Finanzas_${tipoFiltro}_${sucursal}_${new Date().getTime()}.pdf`);
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-8 max-w-6xl mx-auto mt-4 relative">
@@ -341,23 +337,52 @@ function ReporteFinanzas({ sucursal }) {
         </div>
       ) : (
         <>
+          {/* TARJETAS DE RESUMEN */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center">
-              <h3 className="text-gray-500 font-bold mb-1 uppercase text-sm tracking-wider">Ingresos Totales</h3>
-              <p className="text-3xl lg:text-4xl font-black text-[#4A2511]">₡{ventasTotales.toLocaleString()}</p>
+            
+            {/* 👈 TARJETA 1: DESGLOSE POR MÉTODO + TOTAL INGRESOS */}
+            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <h3 className="text-gray-500 font-bold mb-2 uppercase text-xs tracking-wider">Ingresos por Método</h3>
+                <div className="space-y-1.5 text-xs sm:text-sm font-medium text-gray-600 pb-2">
+                  <div className="flex justify-between items-center">
+                    <span>Datáfono:</span>
+                    <span className="font-bold text-gray-800">₡{totalDatafono.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>SINPE Móvil:</span>
+                    <span className="font-bold text-gray-800">₡{totalSinpe.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Efectivo:</span>
+                    <span className="font-bold text-gray-800">₡{totalEfectivo.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* LÍNEA Y TOTAL GENERAL */}
+              <div className="border-t-2 border-gray-200 pt-2 flex justify-between items-baseline mt-2">
+                <span className="text-xs uppercase font-black text-gray-500">Total Ingresos:</span>
+                <span className="text-xl sm:text-2xl font-black text-[#4A2511]">₡{ventasTotales.toLocaleString()}</span>
+              </div>
             </div>
             
+            {/* TARJETA 2: COSTOS */}
             <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center">
               <h3 className="text-gray-500 font-bold mb-1 uppercase text-sm tracking-wider">Costos de Producción</h3>
               <p className="text-3xl lg:text-4xl font-black text-red-600">₡{costosTotales.toLocaleString()}</p>
+              <p className="text-xs text-gray-400 mt-2 font-medium">Inversión en mercancía y producto</p>
             </div>
             
+            {/* TARJETA 3: GANANCIA NETA */}
             <div className="bg-[#FFF0C2] p-6 rounded-xl border-2 border-[#FFB800] shadow-md flex flex-col justify-center relative overflow-hidden">
               <h3 className="text-[#8B5A2B] font-bold mb-1 uppercase text-sm tracking-wider relative z-10">Ganancia Neta</h3>
               <p className="text-4xl lg:text-5xl font-black text-[#2E7D32] relative z-10">₡{gananciaNeta.toLocaleString()}</p>
+              <p className="text-xs text-[#8B5A2B] mt-2 font-bold relative z-10">Margen libre en este periodo</p>
             </div>
           </div>
 
+          {/* TABLA DE VENTAS */}
           <div>
             <h3 className="text-[#8B5A2B] text-xl font-bold mb-4">Registro de Ventas ({cantidadVentas} comprobantes)</h3>
             <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
@@ -389,8 +414,8 @@ function ReporteFinanzas({ sucursal }) {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <span className={`px-3 py-1 rounded-full font-bold text-xs
-                            ${venta.metodoPago === 'SINPE' ? 'bg-gray-100 text-gray-700' : 
-                              venta.metodoPago === 'Efectivo' ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-700'}`}
+                            ${venta.metodoPago === 'SINPE' ? 'bg-purple-100 text-purple-700' : 
+                              venta.metodoPago === 'Efectivo' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}
                           >
                             {venta.metodoPago}
                           </span>
