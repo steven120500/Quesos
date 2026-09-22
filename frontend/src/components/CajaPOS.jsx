@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
-function CajaPOS({ sucursal }) {
+function CajaPOS({ sucursal, usuario }) {
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState([]);
   const [busqueda, setBusqueda] = useState('');
@@ -279,11 +279,13 @@ function CajaPOS({ sucursal }) {
 
       const datosVenta = {
         sucursal: sucursal,
+        cajero: usuario || 'Cajero General', // 👈 Registra quién cobró
         productos: productosVenta,
         totalVenta: Math.round(totalVenta),
         totalCosto: Math.round(totalCosto),
         metodoPago: metodoPago
       };
+      
 
       // 1. Guardar la venta en Supabase
       const { error: errorVenta } = await supabase

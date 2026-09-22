@@ -79,7 +79,7 @@ function ReporteFinanzas({ sucursal }) {
     }
   });
 
-  // --- CÁLCULOS FINANCIEROS Y DESGLOSE DE MÉTODOS DE PAGO ---
+  // --- CÁLCULOS GENERALES ---
   const totalEfectivo = ventasFiltradas.filter(v => v.metodoPago === 'Efectivo').reduce((sum, v) => sum + v.totalVenta, 0);
   const totalSinpe = ventasFiltradas.filter(v => v.metodoPago === 'SINPE').reduce((sum, v) => sum + v.totalVenta, 0);
   const totalDatafono = ventasFiltradas.filter(v => v.metodoPago === 'Datáfono').reduce((sum, v) => sum + v.totalVenta, 0);
@@ -88,6 +88,31 @@ function ReporteFinanzas({ sucursal }) {
   const costosTotales = ventasFiltradas.reduce((suma, v) => suma + v.totalCosto, 0);
   const gananciaNeta = ventasTotales - costosTotales;
   const cantidadVentas = ventasFiltradas.length;
+
+  // --- 👈 DESGLOSE INDIVIDUAL POR CAJERO (EFECTIVO, SINPE, DATÁFONO) ---
+  const ventasPorCajero = {};
+  ventasFiltradas.forEach((v) => {
+    const cajero = v.cajero || 'Cajero';
+    if (!ventasPorCajero[cajero]) {
+      ventasPorCajero[cajero] = {
+        total: 0,
+        cantidad: 0,
+        efectivo: 0,
+        sinpe: 0,
+        datafono: 0
+      };
+    }
+    ventasPorCajero[cajero].total += v.totalVenta;
+    ventasPorCajero[cajero].cantidad += 1;
+
+    if (v.metodoPago === 'Efectivo') {
+      ventasPorCajero[cajero].efectivo += v.totalVenta;
+    } else if (v.metodoPago === 'SINPE') {
+      ventasPorCajero[cajero].sinpe += v.totalVenta;
+    } else if (v.metodoPago === 'Datáfono') {
+      ventasPorCajero[cajero].datafono += v.totalVenta;
+    }
+  });
 
   // --- GENERADOR DE PDF ---
   const generarPDF = () => {
@@ -101,7 +126,7 @@ function ReporteFinanzas({ sucursal }) {
     doc.setFont("helvetica", "bold");
     doc.text(`Quesos - Sucursal ${sucursal}`, 14, 18);
 
-    doc.setFontSize(14);
+    doc.setFontSize(13);
     doc.setTextColor(139, 90, 43);
     doc.setFont("helvetica", "normal");
     doc.text(titulo, 14, 26);
@@ -110,16 +135,15 @@ function ReporteFinanzas({ sucursal }) {
     doc.setTextColor(120, 120, 120);
     doc.text(`Emitido: ${fechaImpresion}   |   Comprobantes emitidos: ${cantidadVentas}`, 14, 33);
 
-    // LÍNEA DIVISORIA
     doc.setDrawColor(225, 225, 225);
     doc.line(14, 37, 196, 37);
 
-    // FILA 1: DESGLOSE DE PAGOS (3 CUADROS)
+    // FILA 1: DESGLOSE GENERAL DE PAGOS
     const yFila1 = 41;
     const altoCaja1 = 25;
     const anchoCaja = 57;
 
-    // Cuadro 1: Efectivo
+    // Efectivo
     doc.setDrawColor(180, 220, 195);
     doc.setFillColor(244, 251, 247);
     doc.roundedRect(14, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
@@ -131,7 +155,7 @@ function ReporteFinanzas({ sucursal }) {
     doc.setTextColor(30, 70, 32);
     doc.text(`CRC ${totalEfectivo.toLocaleString()}`, 18, yFila1 + 17);
 
-    // Cuadro 2: SINPE Móvil
+    // SINPE Móvil
     doc.setDrawColor(210, 195, 235);
     doc.setFillColor(248, 245, 252);
     doc.roundedRect(76.5, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
@@ -143,7 +167,7 @@ function ReporteFinanzas({ sucursal }) {
     doc.setTextColor(74, 20, 140);
     doc.text(`CRC ${totalSinpe.toLocaleString()}`, 80.5, yFila1 + 17);
 
-    // Cuadro 3: Datáfono
+    // Datáfono
     doc.setDrawColor(190, 215, 245);
     doc.setFillColor(243, 247, 254);
     doc.roundedRect(139, yFila1, anchoCaja, altoCaja1, 2.5, 2.5, 'FD');
@@ -155,11 +179,11 @@ function ReporteFinanzas({ sucursal }) {
     doc.setTextColor(13, 71, 161);
     doc.text(`CRC ${totalDatafono.toLocaleString()}`, 143, yFila1 + 17);
 
-    // FILA 2: BALANCE FINANCIERO (3 CUADROS)
+    // FILA 2: BALANCE FINANCIERO
     const yFila2 = 70;
     const altoCaja2 = 27;
 
-    // Cuadro 4: Total Ingresos
+    // Total Ingresos
     doc.setDrawColor(255, 184, 0);
     doc.setFillColor(255, 252, 242);
     doc.roundedRect(14, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
@@ -175,7 +199,7 @@ function ReporteFinanzas({ sucursal }) {
     doc.setFont("helvetica", "normal");
     doc.text("Suma total recaudada", 18, yFila2 + 22);
 
-    // Cuadro 5: Total Costos
+    // Total Costos
     doc.setDrawColor(239, 154, 154);
     doc.setFillColor(255, 245, 245);
     doc.roundedRect(76.5, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
@@ -191,7 +215,7 @@ function ReporteFinanzas({ sucursal }) {
     doc.setFont("helvetica", "normal");
     doc.text("Costos de productos", 80.5, yFila2 + 22);
 
-    // Cuadro 6: Ganancia Neta
+    // Ganancia Neta
     doc.setDrawColor(46, 125, 50);
     doc.setFillColor(232, 245, 233);
     doc.roundedRect(139, yFila2, anchoCaja, altoCaja2, 2.5, 2.5, 'FD');
@@ -207,8 +231,34 @@ function ReporteFinanzas({ sucursal }) {
     doc.setFont("helvetica", "bold");
     doc.text("Margen neto libre", 143, yFila2 + 22);
 
-    // TABLA DETALLADA
-    const columnasTabla = ["Nº Transacción", "Fecha y Hora", "Método", "Total Cobrado"];
+    // TABLA 1: CUADRE POR CAJERO EN PDF
+    const cajerosRows = Object.entries(ventasPorCajero).map(([cajero, d]) => [
+      cajero,
+      `CRC ${d.efectivo.toLocaleString()}`,
+      `CRC ${d.sinpe.toLocaleString()}`,
+      `CRC ${d.datafono.toLocaleString()}`,
+      `CRC ${d.total.toLocaleString()} (${d.cantidad})`
+    ]);
+
+    autoTable(doc, {
+      startY: 103,
+      head: [["Cajero / Usuario", "Efectivo", "SINPE", "Datáfono", "Total Recaudado"]],
+      body: cajerosRows,
+      theme: 'grid',
+      headStyles: { fillColor: '#8B5A2B', textColor: '#FFFFFF', fontStyle: 'bold', fontSize: 8.5 },
+      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      columnStyles: {
+        0: { fontStyle: 'bold' },
+        1: { halign: 'right' },
+        2: { halign: 'right' },
+        3: { halign: 'right' },
+        4: { halign: 'right', fontStyle: 'bold' }
+      }
+    });
+
+    // TABLA 2: DETALLE DE TICKETS INDIVIDUALES
+    const ultY = doc.lastAutoTable.finalY || 135;
+    const columnasTabla = ["Nº Transacción", "Fecha / Hora", "Cajero", "Método", "Total Cobrado"];
     const filasTabla = [];
 
     ventasFiltradas.forEach(venta => {
@@ -216,13 +266,14 @@ function ReporteFinanzas({ sucursal }) {
       filasTabla.push([
         `TRX-${venta._id.slice(-5).toUpperCase()}`,
         `${fecha.toLocaleDateString()} - ${fecha.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+        venta.cajero || 'Cajero',
         venta.metodoPago,
         `CRC ${venta.totalVenta.toLocaleString()}`
       ]);
     });
 
     autoTable(doc, {
-      startY: 104,
+      startY: ultY + 8,
       head: [columnasTabla],
       body: filasTabla,
       theme: 'striped',
@@ -230,15 +281,16 @@ function ReporteFinanzas({ sucursal }) {
         fillColor: '#4A2511', 
         textColor: [255, 184, 0], 
         fontStyle: 'bold',
-        fontSize: 9
+        fontSize: 8.5
       },
       alternateRowStyles: { fillColor: [250, 250, 251] },
-      styles: { fontSize: 9, cellPadding: 3.5 },
+      styles: { fontSize: 8, cellPadding: 2.5 },
       columnStyles: {
-        0: { cellWidth: 38 },
-        1: { cellWidth: 55 },
-        2: { cellWidth: 38 },
-        3: { halign: 'right', fontStyle: 'bold' }
+        0: { cellWidth: 32 },
+        1: { cellWidth: 46 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 30 },
+        4: { halign: 'right', fontStyle: 'bold' }
       },
       didDrawPage: function () {
         doc.setFontSize(8);
@@ -251,7 +303,7 @@ function ReporteFinanzas({ sucursal }) {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-8 max-w-6xl mx-auto mt-4 relative">
+    <div className="bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-6 lg:p-8 max-w-6xl mx-auto mt-4 relative">
       {notificacion.visible && (
         <div className={`fixed bottom-5 right-5 sm:bottom-10 sm:right-10 px-6 py-4 rounded-xl shadow-2xl z-50 flex items-center gap-3 transition-all text-white font-bold text-lg
           ${notificacion.tipo === 'exito' ? 'bg-[#2E7D32]' : 'bg-red-600'}`}>
@@ -337,90 +389,154 @@ function ReporteFinanzas({ sucursal }) {
         </div>
       ) : (
         <>
-          {/* TARJETAS DE RESUMEN */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          {/* CUADROS DE RESUMEN FINANCIERO */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             
-            {/* 👈 TARJETA 1: DESGLOSE POR MÉTODO + TOTAL INGRESOS */}
+            {/* TARJETA 1: INGRESOS GENERALES */}
             <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
               <div>
-                <h3 className="text-gray-500 font-bold mb-2 uppercase text-xs tracking-wider">Ingresos por Método</h3>
-                <div className="space-y-1.5 text-xs sm:text-sm font-medium text-gray-600 pb-2">
-                  <div className="flex justify-between items-center">
-                    <span>Datáfono:</span>
-                    <span className="font-bold text-gray-800">₡{totalDatafono.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span>SINPE Móvil:</span>
-                    <span className="font-bold text-gray-800">₡{totalSinpe.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span>Efectivo:</span>
-                    <span className="font-bold text-gray-800">₡{totalEfectivo.toLocaleString()}</span>
-                  </div>
+                <h3 className="text-gray-500 font-bold mb-2 uppercase text-xs tracking-wider">Ingresos Generales</h3>
+                <div className="space-y-1 text-xs font-medium text-gray-600 pb-2">
+                  <div className="flex justify-between"><span>Datáfono:</span><span className="font-bold text-gray-800">₡{totalDatafono.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span>SINPE:</span><span className="font-bold text-gray-800">₡{totalSinpe.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span>Efectivo:</span><span className="font-bold text-gray-800">₡{totalEfectivo.toLocaleString()}</span></div>
                 </div>
               </div>
-
-              {/* LÍNEA Y TOTAL GENERAL */}
-              <div className="border-t-2 border-gray-200 pt-2 flex justify-between items-baseline mt-2">
-                <span className="text-xs uppercase font-black text-gray-500">Total Ingresos:</span>
-                <span className="text-xl sm:text-2xl font-black text-[#4A2511]">₡{ventasTotales.toLocaleString()}</span>
+              <div className="border-t-2 border-gray-200 pt-2 flex justify-between items-baseline mt-1">
+                <span className="text-[11px] uppercase font-black text-gray-500">Total:</span>
+                <span className="text-xl font-black text-[#4A2511]">₡{ventasTotales.toLocaleString()}</span>
               </div>
             </div>
-            
+
             {/* TARJETA 2: COSTOS */}
-            <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center">
-              <h3 className="text-gray-500 font-bold mb-1 uppercase text-sm tracking-wider">Costos de Producción</h3>
-              <p className="text-3xl lg:text-4xl font-black text-red-600">₡{costosTotales.toLocaleString()}</p>
-              <p className="text-xs text-gray-400 mt-2 font-medium">Inversión en mercancía y producto</p>
+            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <h3 className="text-gray-500 font-bold mb-1 uppercase text-xs tracking-wider">Costos de Prod.</h3>
+                <p className="text-2xl font-black text-red-600">₡{costosTotales.toLocaleString()}</p>
+              </div>
+              <p className="text-xs text-gray-400 mt-2 font-medium border-t-2 border-gray-200 pt-2">
+                Inversión en productos
+              </p>
             </div>
             
             {/* TARJETA 3: GANANCIA NETA */}
-            <div className="bg-[#FFF0C2] p-6 rounded-xl border-2 border-[#FFB800] shadow-md flex flex-col justify-center relative overflow-hidden">
-              <h3 className="text-[#8B5A2B] font-bold mb-1 uppercase text-sm tracking-wider relative z-10">Ganancia Neta</h3>
-              <p className="text-4xl lg:text-5xl font-black text-[#2E7D32] relative z-10">₡{gananciaNeta.toLocaleString()}</p>
-              <p className="text-xs text-[#8B5A2B] mt-2 font-bold relative z-10">Margen libre en este periodo</p>
+            <div className="bg-[#FFF0C2] p-5 rounded-xl border-2 border-[#FFB800] shadow-md flex flex-col justify-between relative overflow-hidden">
+              <div>
+                <h3 className="text-[#8B5A2B] font-bold mb-1 uppercase text-xs tracking-wider relative z-10">Ganancia Neta</h3>
+                <p className="text-3xl font-black text-[#2E7D32] relative z-10">₡{gananciaNeta.toLocaleString()}</p>
+              </div>
+              <p className="text-xs text-[#8B5A2B] mt-2 font-bold relative z-10 border-t-2 border-[#FFE082] pt-2">
+                Margen neto libre
+              </p>
+            </div>
+
+            {/* TARJETA 4: ACTIVIDAD */}
+            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <h3 className="text-gray-500 font-bold mb-1 uppercase text-xs tracking-wider">Comprobantes</h3>
+                <p className="text-3xl font-black text-[#8B5A2B]">{cantidadVentas}</p>
+              </div>
+              <p className="text-xs text-gray-400 mt-2 font-medium border-t-2 border-gray-200 pt-2">
+                Tickets procesados
+              </p>
             </div>
           </div>
 
-          {/* TABLA DE VENTAS */}
+          {/* 👈 NUEVA SECCIÓN DESTACADA: CUADRE POR CAJERO CON DESGLOSE */}
+          <div className="mb-8">
+            <h3 className="text-[#8B5A2B] text-lg font-bold mb-3"> Cuadre de Caja por Usuario</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.keys(ventasPorCajero).length === 0 ? (
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-gray-400 text-sm italic col-span-full">
+                  No hay ventas de usuarios en este periodo.
+                </div>
+              ) : (
+                Object.entries(ventasPorCajero).map(([cajero, d]) => (
+                  <div key={cajero} className="bg-white p-4 rounded-xl border-2 border-gray-200 shadow-sm flex flex-col justify-between hover:border-[#FFB800] transition-colors">
+                    <div>
+                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
+                        <span className="font-bold text-gray-800 capitalize text-base flex items-center gap-1.5">
+                           {cajero}
+                        </span>
+                        <span className="text-xs font-bold bg-amber-50 text-[#8B5A2B] px-2 py-0.5 rounded border border-amber-200">
+                          {d.cantidad} {d.cantidad === 1 ? 'ticket' : 'tickets'}
+                        </span>
+                      </div>
+
+                      {/* Desglose individual de métodos */}
+                      <div className="space-y-1.5 text-xs text-gray-600 font-medium">
+                        <div className="flex justify-between items-center bg-gray-50 px-2.5 py-1.5 rounded-lg">
+                          <span>Efectivo:</span>
+                          <span className="font-black text-gray-800">₡{d.efectivo.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-gray--50 px-2.5 py-1.5 rounded-lg">
+                          <span className="text-gray-600">SINPE Móvil:</span>
+                          <span className="font-black text-gray-800">₡{d.sinpe.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-gray-50 px-2.5 py-1.5 rounded-lg">
+                          <span className="text-gray-700">Datáfono:</span>
+                          <span className="font-black text-gray-800">₡{d.datafono.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Total individual del cajero */}
+                    <div className="border-t-2 border-gray-100 pt-2.5 mt-3 flex justify-between items-baseline">
+                      <span className="text-xs font-bold text-gray-500 uppercase">Total Cajero:</span>
+                      <span className="text-lg font-black text-[#2E7D32]">₡{d.total.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* TABLA DE VENTAS CON COLUMNA CAJERO */}
           <div>
-            <h3 className="text-[#8B5A2B] text-xl font-bold mb-4">Registro de Ventas ({cantidadVentas} comprobantes)</h3>
+            <h3 className="text-[#8B5A2B] text-lg font-bold mb-3">Historial Detallado de Transacciones</h3>
             <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
               <table className="min-w-full divide-y divide-gray-200 text-left">
                 <thead className="bg-[#4A2511] text-[#FFB800]">
                   <tr>
-                    <th className="px-6 py-4 text-sm font-bold tracking-wider">Nº Transacción</th>
-                    <th className="px-6 py-4 text-sm font-bold tracking-wider">Fecha / Hora</th>
-                    <th className="px-6 py-4 text-sm font-bold tracking-wider">Método de Pago</th>
-                    <th className="px-6 py-4 text-sm font-bold tracking-wider text-right">Monto</th>
-                    <th className="px-4 py-4 text-sm font-bold tracking-wider text-center">Acciones</th>
+                    <th className="px-5 py-4 text-xs font-bold tracking-wider uppercase">Nº Transacción</th>
+                    <th className="px-5 py-4 text-xs font-bold tracking-wider uppercase">Fecha / Hora</th>
+                    <th className="px-5 py-4 text-xs font-bold tracking-wider uppercase">Cajero</th>
+                    <th className="px-5 py-4 text-xs font-bold tracking-wider uppercase">Método de Pago</th>
+                    <th className="px-5 py-4 text-xs font-bold tracking-wider uppercase text-right">Monto</th>
+                    <th className="px-4 py-4 text-xs font-bold tracking-wider uppercase text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {ventasFiltradas.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-8 text-center text-gray-500 font-medium text-lg">
+                      <td colSpan="6" className="px-6 py-8 text-center text-gray-500 font-medium text-lg">
                         No hay ventas registradas en esta fecha.
                       </td>
                     </tr>
                   ) : (
                     ventasFiltradas.map((venta) => (
                       <tr key={venta._id} className="hover:bg-gray-50 transition-colors group">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
+                        <td className="px-5 py-4 whitespace-nowrap text-xs font-black text-gray-700">
                           TRX-{venta._id.slice(-5).toUpperCase()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-5 py-4 whitespace-nowrap text-xs text-gray-500">
                           {new Date(venta.createdAt).toLocaleDateString()} - {new Date(venta.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className={`px-3 py-1 rounded-full font-bold text-xs
+                        <td className="px-5 py-4 whitespace-nowrap text-xs font-bold text-gray-800 capitalize">
+                          <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-md border border-gray-200">
+                             {venta.cajero || 'Cajero'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 whitespace-nowrap text-xs">
+                          <span className={`px-2.5 py-1 rounded-full font-bold text-xs
                             ${venta.metodoPago === 'SINPE' ? 'bg-purple-100 text-purple-700' : 
                               venta.metodoPago === 'Efectivo' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}
                           >
                             {venta.metodoPago}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-[#4A2511] text-right">
+                        <td className="px-5 py-4 whitespace-nowrap text-sm font-black text-[#4A2511] text-right">
                           ₡{venta.totalVenta.toLocaleString()}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-center">

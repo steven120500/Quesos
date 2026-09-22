@@ -189,7 +189,10 @@ function App() {
         </div>
 
         <main className="flex-1 p-4 overflow-hidden">
-          {vistaActiva === 'pos' && tienePermiso('pos') && <CajaPOS sucursal={sucursal} />}
+         {/* Antes: <CajaPOS sucursal={sucursal} /> */}
+{vistaActiva === 'pos' && tienePermiso('pos') && (
+  <CajaPOS sucursal={sucursal} usuario={nombreMostrar} />
+)}
           {vistaActiva === 'agregar' && tienePermiso('agregar') && <AgregarProducto sucursal={sucursal} />}
           {vistaActiva === 'finanzas' && tienePermiso('finanzas') && <ReporteFinanzas sucursal={sucursal} />}
           {/* 👈 3. RENDERIZAR LA VISTA DE KILOS */}
