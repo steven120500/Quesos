@@ -5,6 +5,7 @@ function CajaPOS({ sucursal, usuario }) {
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState([]);
   const [busqueda, setBusqueda] = useState('');
+  const [cantidad, setCantidad] = useState(1);
   const [cargando, setCargando] = useState(true);
   
   const [metodoPago, setMetodoPago] = useState('Efectivo');
@@ -23,41 +24,61 @@ function CajaPOS({ sucursal, usuario }) {
   const [nombreEdit, setNombreEdit] = useState('');
   const [precioCostoEdit, setPrecioCostoEdit] = useState('');
   const [precioVentaEdit, setPrecioVentaEdit] = useState('');
-  const [stockEdit, setStockEdit] = useState(''); // 👈 Stock editable en el lápiz
+  const [stockEdit, setStockEdit] = useState('');
   const [guardandoEdit, setGuardandoEdit] = useState(false);
 
   // Referencias para foco
   const inputBusquedaRef = useRef(null);
   const inputPesoRef = useRef(null);
 
-  // Carga el catálogo de productos
+  // Carga el catálogo y combina el stock de la sucursal actual
   useEffect(() => {
-    const obtenerProductos = async () => {
+    const obtenerProductosEInventario = async () => {
       setCargando(true);
       try {
-        const { data, error } = await supabase
+        // 1. Obtener lista de productos
+        const { data: prods, error: errProds } = await supabase
           .from('productos')
           .select('*')
           .order('codigo', { ascending: true });
 
-        if (data) setProductos(data);
+        // 2. Obtener inventario de la sucursal activa
+        const { data: inv, error: errInv } = await supabase
+          .from('inventario_sucursal')
+          .select('producto_id, stock')
+          .eq('sucursal', sucursal);
+
+        if (prods) {
+          const mapaStock = {};
+          if (inv) {
+            inv.forEach((item) => {
+              mapaStock[item.producto_id] = item.stock;
+            });
+          }
+
+          // Asignar el stock que corresponde a esta sucursal
+          const prodsConStock = prods.map((p) => ({
+            ...p,
+            stock: p.tipoVenta === 'Unidad' ? (mapaStock[p._id] ?? 0) : null
+          }));
+
+          setProductos(prodsConStock);
+        }
       } catch (error) {
         console.error("Error al obtener los productos:", error);
       } finally {
         setCargando(false);
       }
     };
-    obtenerProductos();
+    obtenerProductosEInventario();
   }, [sucursal]);
 
-  // Enfoca el buscador al iniciar y cada vez que se cierra un modal
   useEffect(() => {
     if (!productoParaPesar && !productoAEliminar && !productoAEditar && inputBusquedaRef.current) {
       inputBusquedaRef.current.focus();
     }
   }, [productoParaPesar, productoAEliminar, productoAEditar]);
 
-  // Atajo global de teclado: Shift para cobrar venta
   useEffect(() => {
     const manejarAtajoGlobal = (e) => {
       if (e.key === 'Shift') {
@@ -76,28 +97,115 @@ function CajaPOS({ sucursal, usuario }) {
     setTimeout(() => { setNotificacion({ visible: false, mensaje: '', tipo: '' }); }, 3000);
   };
 
-  const manejarClickProducto = (producto) => {
+  const manejarClickProducto = (producto, cant = cantidad) => {
+    const cantidadASumar = Math.max(1, parseInt(cant, 10) || 1);
+
     if (producto.tipoVenta === 'Unidad') {
       const itemExistente = carrito.find((item) => item._id === producto._id);
       const cantidadEnCarrito = itemExistente ? itemExistente.cantidad : 0;
+      const totalFinal = cantidadEnCarrito + cantidadASumar;
 
-      // Validación opcional si el stock llega a 0
-      if ((producto.stock || 0) <= cantidadEnCarrito) {
-        mostrarNotificacion(`¡Aviso: No queda más stock de ${producto.nombre}!`, 'error');
+      if ((producto.stock || 0) < totalFinal) {
+        mostrarNotificacion(`¡Aviso: Stock insuficiente en ${sucursal} para ${producto.nombre}! (Disponible: ${producto.stock || 0})`, 'error');
       }
 
       if (itemExistente) {
-        setCarrito(carrito.map((item) => item._id === producto._id ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precioVenta } : item));
+        setCarrito(carrito.map((item) => 
+          item._id === producto._id 
+            ? { ...item, cantidad: totalFinal, subtotal: totalFinal * item.precioVenta } 
+            : item
+        ));
       } else {
-        setCarrito([...carrito, { ...producto, cantidad: 1, subtotal: producto.precioVenta }]);
+        setCarrito([...carrito, { ...producto, cantidad: cantidadASumar, subtotal: cantidadASumar * producto.precioVenta }]);
       }
       setBusqueda('');
+      setCantidad(1);
       if (inputBusquedaRef.current) inputBusquedaRef.current.focus();
     } else {
       setProductoParaPesar(producto);
       setPesoGramos('');
       setPrecioCobrar('');
     }
+  };
+
+  const manejarKeyDownBusqueda = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const texto = busqueda.trim();
+      if (!texto) return;
+
+      let cant = cantidad;
+      let textoLimpio = texto;
+
+      if (texto.includes('*')) {
+        const partes = texto.split('*');
+        const multiplicador = parseInt(partes[0], 10);
+        if (!isNaN(multiplicador) && multiplicador > 0) {
+          cant = multiplicador;
+          textoLimpio = partes.slice(1).join('*').trim();
+        }
+      }
+
+      const productoPorCodigo = productos.find(
+        (p) => p.codigo === textoLimpio || parseInt(p.codigo, 10) === parseInt(textoLimpio, 10)
+      );
+
+      if (productoPorCodigo) {
+        manejarClickProducto(productoPorCodigo, cant);
+        return;
+      }
+
+      const filtrados = productos.filter((p) => 
+        p.nombre.toLowerCase().includes(textoLimpio.toLowerCase()) || 
+        p.codigo.includes(textoLimpio)
+      );
+
+      if (filtrados.length === 1) {
+        manejarClickProducto(filtrados[0], cant);
+      }
+    }
+  };
+
+  const modificarCantidadCarrito = (itemCartId, delta) => {
+    setCarrito((prev) =>
+      prev
+        .map((item) => {
+          if ((item.cartId || item._id) === itemCartId && item.tipoVenta === 'Unidad') {
+            const nuevaCantidad = item.cantidad + delta;
+            if (nuevaCantidad <= 0) return null;
+            if (delta > 0 && (item.stock || 0) < nuevaCantidad) {
+              mostrarNotificacion(`¡Aviso: No queda más stock en ${sucursal} de ${item.nombre}!`, 'error');
+            }
+            return {
+              ...item,
+              cantidad: nuevaCantidad,
+              subtotal: nuevaCantidad * item.precioVenta
+            };
+          }
+          return item;
+        })
+        .filter(Boolean)
+    );
+  };
+
+  const actualizarCantidadDirecta = (itemCartId, valor) => {
+    const nuevaCant = parseInt(valor, 10);
+    if (isNaN(nuevaCant) || nuevaCant <= 0) return;
+    setCarrito((prev) =>
+      prev.map((item) => {
+        if ((item.cartId || item._id) === itemCartId && item.tipoVenta === 'Unidad') {
+          if ((item.stock || 0) < nuevaCant) {
+            mostrarNotificacion(`¡Aviso: Stock en ${sucursal} de ${item.nombre}: ${item.stock || 0}!`, 'error');
+          }
+          return {
+            ...item,
+            cantidad: nuevaCant,
+            subtotal: nuevaCant * item.precioVenta
+          };
+        }
+        return item;
+      })
+    );
   };
 
   const manejarCambioGramos = (valor) => {
@@ -108,35 +216,6 @@ function CajaPOS({ sucursal, usuario }) {
       setPrecioCobrar(String(sugerido));
     } else {
       setPrecioCobrar('');
-    }
-  };
-
-  const redondearPrecio = (multiplo) => {
-    const actual = Number(precioCobrar);
-    if (!isNaN(actual) && actual > 0) {
-      const redondeado = Math.round(actual / multiplo) * multiplo;
-      setPrecioCobrar(String(redondeado));
-    }
-  };
-
-  const manejarKeyDownBusqueda = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const texto = busqueda.trim();
-      if (!texto) return;
-
-      const productoPorCodigo = productos.find(
-        (p) => p.codigo === texto || parseInt(p.codigo, 10) === parseInt(texto, 10)
-      );
-
-      if (productoPorCodigo) {
-        manejarClickProducto(productoPorCodigo);
-        return;
-      }
-
-      if (productosFiltrados.length === 1) {
-        manejarClickProducto(productosFiltrados[0]);
-      }
     }
   };
 
@@ -176,14 +255,14 @@ function CajaPOS({ sucursal, usuario }) {
     }
   };
 
-  // --- LÓGICA DE EDICIÓN ---
+  // --- EDICIÓN DE PRODUCTO Y STOCK POR SUCURSAL ---
   const abrirEdicion = (e, producto) => {
     e.stopPropagation();
     setProductoAEditar(producto);
     setNombreEdit(producto.nombre);
     setPrecioCostoEdit(producto.precioCosto);
     setPrecioVentaEdit(producto.precioVenta);
-    setStockEdit(producto.stock !== undefined ? producto.stock : 0);
+    setStockEdit(producto.stock !== undefined && producto.stock !== null ? producto.stock : 0);
   };
 
   const guardarEdicionBD = async (e) => {
@@ -192,41 +271,58 @@ function CajaPOS({ sucursal, usuario }) {
     setGuardandoEdit(true);
 
     try {
+      // 1. Actualizar datos generales del producto
       const camposActualizar = {
         nombre: nombreEdit.trim(),
         precioCosto: Number(precioCostoEdit),
         precioVenta: Number(precioVentaEdit)
       };
 
-      if (productoAEditar.tipoVenta === 'Unidad') {
-        camposActualizar.stock = parseInt(stockEdit, 10) || 0;
-      }
-
-      const { error } = await supabase
+      const { error: errProd } = await supabase
         .from('productos')
         .update(camposActualizar)
         .eq('_id', productoAEditar._id);
 
-      if (!error) {
-        setProductos(productos.map((p) => 
-          p._id === productoAEditar._id 
-            ? { ...p, ...camposActualizar } 
-            : p
-        ));
-        mostrarNotificacion('¡Producto actualizado con éxito!', 'exito');
-        setProductoAEditar(null);
-      } else {
-        mostrarNotificacion('Error al actualizar el producto', 'error');
+      if (errProd) throw errProd;
+
+      // 2. Si es por unidad, actualizar o insertar stock en inventario_sucursal para esta sucursal
+      const stockNumero = parseInt(stockEdit, 10) || 0;
+      if (productoAEditar.tipoVenta === 'Unidad') {
+        const { error: errInv } = await supabase
+          .from('inventario_sucursal')
+          .upsert(
+            {
+              producto_id: productoAEditar._id,
+              sucursal: sucursal,
+              stock: stockNumero
+            },
+            { onConflict: 'producto_id, sucursal' }
+          );
+
+        if (errInv) throw errInv;
       }
+
+      // 3. Actualizar estado local
+      setProductos(productos.map((p) => 
+        p._id === productoAEditar._id 
+          ? { 
+              ...p, 
+              ...camposActualizar, 
+              stock: p.tipoVenta === 'Unidad' ? stockNumero : null 
+            } 
+          : p
+      ));
+
+      mostrarNotificacion('¡Producto actualizado con éxito!', 'exito');
+      setProductoAEditar(null);
     } catch (err) {
       console.error(err);
-      mostrarNotificacion('Error de conexión', 'error');
+      mostrarNotificacion('Error al actualizar el producto', 'error');
     } finally {
       setGuardandoEdit(false);
     }
   };
 
-  // --- LÓGICA DE ELIMINACIÓN ---
   const confirmarEliminacion = (e, producto) => {
     e.stopPropagation(); 
     setProductoAEliminar(producto);
@@ -260,16 +356,16 @@ function CajaPOS({ sucursal, usuario }) {
   const totalVenta = carrito.reduce((suma, item) => suma + (item.subtotal !== undefined ? item.subtotal : (item.precioVenta * item.cantidad)), 0);
   const totalCosto = carrito.reduce((suma, item) => suma + (item.precioCosto * item.cantidad), 0);
 
-  const productosFiltrados = productos.filter(producto => 
+  const productosFiltrados = productos.filter((producto) => 
     producto.nombre.toLowerCase().includes(busqueda.toLowerCase()) || 
     producto.codigo.includes(busqueda)
   );
 
-  // --- PROCESAR VENTA Y DESCONTAR STOCK ---
+  // --- PROCESAR VENTA DESCONTANDO DE LA SUCURSAL ACTUAL ---
   const procesarVenta = async () => {
     setProcesando(true);
     try {
-      const productosVenta = carrito.map(item => ({
+      const productosVenta = carrito.map((item) => ({
         productoId: item._id,
         nombre: item.nombre,
         cantidad: item.cantidad, 
@@ -279,31 +375,30 @@ function CajaPOS({ sucursal, usuario }) {
 
       const datosVenta = {
         sucursal: sucursal,
-        cajero: usuario || 'Cajero General', // 👈 Registra quién cobró
+        cajero: usuario || 'Cajero General',
         productos: productosVenta,
         totalVenta: Math.round(totalVenta),
         totalCosto: Math.round(totalCosto),
         metodoPago: metodoPago
       };
-      
 
-      // 1. Guardar la venta en Supabase
       const { error: errorVenta } = await supabase
         .from('ventas')
         .insert([datosVenta]);
 
       if (!errorVenta) {
-        // 2. Descontar el stock en la base de datos de los productos que sean por unidad
+        // Descontar inventario únicamente para la sucursal actual
         for (const item of carrito) {
           if (item.tipoVenta === 'Unidad') {
             await supabase.rpc('descontar_stock', {
               p_producto_id: item._id,
+              p_sucursal: sucursal, // 👈 Se envía la sucursal
               p_cantidad: item.cantidad
             });
           }
         }
 
-        // 3. Actualizar el stock en la pantalla al instante
+        // Actualizar visualmente el stock de la sucursal
         setProductos((prev) =>
           prev.map((p) => {
             if (p.tipoVenta === 'Unidad') {
@@ -319,6 +414,7 @@ function CajaPOS({ sucursal, usuario }) {
         mostrarNotificacion('¡Venta registrada e inventario actualizado!', 'exito');
         setCarrito([]); 
         setMetodoPago('Efectivo'); 
+        setCantidad(1);
         if (inputBusquedaRef.current) inputBusquedaRef.current.focus();
       } else {
         mostrarNotificacion('Hubo un error al registrar la venta.', 'error');
@@ -387,10 +483,12 @@ function CajaPOS({ sucursal, usuario }) {
                 </div>
               </div>
 
-              {/* Si es unidad, permite editar o reabastecer el stock */}
               {productoAEditar.tipoVenta === 'Unidad' && (
                 <div className="bg-[#FFF9E6] p-3 rounded-xl border border-[#FFE082]">
-                  <label className="block text-sm font-bold text-[#8B5A2B] mb-1">Stock disponible (Unidades)</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-bold text-[#8B5A2B]">Stock en {sucursal}</label>
+                    <span className="text-xs bg-[#FFB800] text-white font-bold px-2 py-0.5 rounded">Sucursal Actual</span>
+                  </div>
                   <input 
                     type="number" 
                     required 
@@ -490,9 +588,6 @@ function CajaPOS({ sucursal, usuario }) {
               <div className="mb-4 bg-[#FFF9E6] p-3 rounded-xl border border-[#FFE082]">
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-xs font-bold text-[#8B5A2B]">2. Monto a cobrar (Editable):</label>
-                  <div className="flex gap-1">
-                  
-                  </div>
                 </div>
 
                 <div className="relative">
@@ -530,16 +625,30 @@ function CajaPOS({ sucursal, usuario }) {
       <section className="w-full lg:w-2/3 bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-4 flex flex-col lg:h-[calc(100vh-140px)] min-h-[500px]">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b border-gray-100 gap-4">
           <h2 className="text-[#8B5A2B] text-2xl font-bold whitespace-nowrap">Caja - {sucursal}</h2>
-          <div className="relative w-full sm:w-1/2 md:w-2/3 lg:w-1/2">
-            <input 
-              type="text" 
-              ref={inputBusquedaRef}
-              placeholder="Código o nombre (Enter para agregar)..." 
-              value={busqueda} 
-              onChange={(e) => setBusqueda(e.target.value)} 
-              onKeyDown={manejarKeyDownBusqueda}
-              className="w-full pl-4 pr-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-[#FFB800] focus:bg-white focus:outline-none transition-colors text-gray-700 shadow-inner text-base font-medium" 
-            />
+          
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-1 justify-end">
+            <div className="flex items-center bg-gray-50 border-2 border-gray-200 rounded-xl px-2.5 py-1.5 shadow-inner">
+              <label className="text-xs font-bold text-gray-500 mr-1.5">Cant:</label>
+              <input
+                type="number"
+                min="1"
+                value={cantidad}
+                onChange={(e) => setCantidad(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="w-12 text-center bg-white border border-gray-300 rounded-lg text-sm font-bold py-1 focus:outline-none focus:border-[#FFB800] text-gray-800"
+              />
+            </div>
+
+            <div className="relative flex-1 sm:w-64 md:w-80">
+              <input 
+                type="text" 
+                ref={inputBusquedaRef}
+                placeholder="Código o nombre (ej: 5*código)..." 
+                value={busqueda} 
+                onChange={(e) => setBusqueda(e.target.value)} 
+                onKeyDown={manejarKeyDownBusqueda}
+                className="w-full pl-4 pr-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-[#FFB800] focus:bg-white focus:outline-none transition-colors text-gray-700 shadow-inner text-base font-medium" 
+              />
+            </div>
           </div>
         </div>
 
@@ -555,10 +664,9 @@ function CajaPOS({ sucursal, usuario }) {
                   </span>
                   <div className="flex flex-col">
                     <span className="font-bold text-gray-700 text-left text-sm sm:text-lg">{producto.nombre}</span>
-                    {/* Badge de Stock en productos por unidad */}
                     {producto.tipoVenta === 'Unidad' && (
                       <span className={`text-[11px] font-bold text-left ${producto.stock > 0 ? 'text-[#2E7D32]' : 'text-red-500 animate-pulse'}`}>
-                        {producto.stock > 0 ? `Stock: ${producto.stock} und` : 'Agotado (0 und)'}
+                        {producto.stock > 0 ? `Stock en ${sucursal}: ${producto.stock} und` : `Agotado en ${sucursal} (0 und)`}
                       </span>
                     )}
                   </div>
@@ -575,7 +683,7 @@ function CajaPOS({ sucursal, usuario }) {
                   <button 
                     onClick={(e) => abrirEdicion(e, producto)}
                     className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors cursor-pointer"
-                    title="Editar producto o reabastecer stock"
+                    title={`Editar producto o stock de ${sucursal}`}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -601,7 +709,7 @@ function CajaPOS({ sucursal, usuario }) {
 
       {/* --- PANEL DE TICKET / COBRO --- */}
       <aside className="w-full lg:w-1/3 bg-white rounded-xl shadow-md border-2 border-[#FFF0C2] p-4 flex flex-col lg:h-[calc(100vh-140px)] min-h-[400px]">
-        <h2 className="text-[#8B5A2B] text-2xl font-bold mb-4 border-b border-gray-100 pb-2">Ticket de Venta</h2>
+        <h2 className="text-[#8B5A2B] text-2xl font-bold mb-4 border-b border-gray-100 pb-2">Ticket de Venta ({sucursal})</h2>
         
         <div className="flex-1 overflow-y-auto bg-gray-50 rounded-lg border border-gray-200 p-2 mb-4">
           {carrito.length === 0 ? (
@@ -612,13 +720,39 @@ function CajaPOS({ sucursal, usuario }) {
                 <li key={item.cartId || item._id} className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm">
                   <div className="flex flex-col">
                     <span className="font-bold text-gray-700 text-sm">{item.nombre}</span>
-                    <span className="text-gray-500 text-xs">
-                      {item.tipoVenta === 'Unidad' 
-                        ? `${item.cantidad} und x ₡${item.precioVenta.toLocaleString()}` 
-                        : `${item.cantidad.toFixed(3)} kg (Cobrado: ₡${Math.round(item.subtotal).toLocaleString()})`
-                      }
-                    </span>
+                    
+                    {item.tipoVenta === 'Unidad' ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <button 
+                          type="button" 
+                          onClick={() => modificarCantidadCarrito(item.cartId || item._id, -1)}
+                          className="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 text-gray-700 rounded font-bold text-xs cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.cantidad}
+                          onChange={(e) => actualizarCantidadDirecta(item.cartId || item._id, e.target.value)}
+                          className="w-10 text-center border border-gray-300 rounded text-xs font-bold py-0.5 focus:outline-none focus:border-[#FFB800] text-gray-800"
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => modificarCantidadCarrito(item.cartId || item._id, 1)}
+                          className="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 text-gray-700 rounded font-bold text-xs cursor-pointer"
+                        >
+                          +
+                        </button>
+                        <span className="text-gray-500 text-xs ml-1">x ₡{item.precioVenta.toLocaleString()}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500 text-xs">
+                        {`${item.cantidad.toFixed(3)} kg (Cobrado: ₡${Math.round(item.subtotal).toLocaleString()})`}
+                      </span>
+                    )}
                   </div>
+
                   <div className="flex items-center gap-2 sm:gap-3">
                     <span className="font-black text-[#4A2511] text-base">
                       ₡{Math.round(item.subtotal !== undefined ? item.subtotal : (item.precioVenta * item.cantidad)).toLocaleString()}
